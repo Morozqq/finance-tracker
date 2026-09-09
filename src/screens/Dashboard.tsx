@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
-import { motion } from 'motion/react'
+import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import { ArrowDown, ArrowUp, CalendarBlank, X } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../data/store'
 import { Badge, Button, Card, Screen, Segmented, SectionTitle, Skeleton, cx } from '../components/ui'
 import { Bars, Donut, ShareBar } from '../components/Charts'
+import { TxDrill } from '../components/TxDrill'
 import {
   accountBalance,
   byCategory,
@@ -17,13 +18,30 @@ import {
   totals,
   type Period,
 } from '../lib/analytics'
-import { money, num, plural, shortDate } from '../lib/format'
+import { compactMoney, dayLabel, money, monthLabel, num, plural, shortDate } from '../lib/format'
 import { parseISO, differenceInCalendarDays, getDate } from 'date-fns'
 
-export function Dashboard({ onAdd }: { onAdd: () => void }) {
-  const { data, ready, postedCount, dismissPosted, clearDemo } = useApp()
+export function Dashboard({
+  onAdd,
+  onDrill,
+}: {
+  onAdd: () => void
+  onDrill?: (open: boolean) => void
+}) {
+  const { data, ready, postedCount, dismissPosted, clearDemo, deleteTransaction } = useApp()
   const [period, setPeriod] = useState<Period>('month')
+  // Only one drill-down is open at a time: opening one closes the other.
   const [activeSlice, setActiveSlice] = useState<string | null>(null)
+  const [activeBar, setActiveBar] = useState<string | null>(null)
+
+  const pickSlice = (id: string | null) => {
+    setActiveSlice(id)
+    if (id) setActiveBar(null)
+  }
+  const pickBar = (key: string | null) => {
+    setActiveBar(key)
+    if (key) setActiveSlice(null)
+  }
 
   const range = useMemo(() => rangeFor(period), [period])
   const scoped = useMemo(
@@ -60,6 +78,50 @@ export function Dashboard({ onAdd }: { onAdd: () => void }) {
       tick: i % step === 0,
     }))
   }, [byMonth, data.transactions, scoped, range])
+
+  const categoryIndex = useMemo(
+    () => new Map(data.categories.map((c) => [c.id, c])),
+    [data.categories],
+  )
+  const accountIndex = useMemo(() => new Map(data.accounts.map((a) => [a.id, a])), [data.accounts])
+
+  const sliceItems = useMemo(
+    () =>
+      activeSlice
+        ? scoped
+            .filter((t) => t.categoryId === activeSlice)
+            .sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
+        : [],
+    [activeSlice, scoped],
+  )
+
+  const barItems = useMemo(() => {
+    if (!activeBar) return []
+    const source = byMonth ? data.transactions : scoped
+    const match = byMonth
+      ? (t: (typeof source)[number]) => t.occurredAt.slice(0, 7) === activeBar
+      : (t: (typeof source)[number]) => t.occurredAt === activeBar
+    return source
+      .filter((t) => t.kind === 'expense' && match(t))
+      .sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
+  }, [activeBar, byMonth, data.transactions, scoped])
+
+  // Сообщаем наверх, открыт ли разбор: пока открыт, плавающая кнопка прячется.
+  useEffect(() => {
+    onDrill?.(Boolean(activeSlice || activeBar))
+    return () => onDrill?.(false)
+  }, [activeSlice, activeBar, onDrill])
+
+  const selectedSlice = useMemo(
+    () => slices.find((s) => s.category.id === activeSlice) ?? null,
+    [slices, activeSlice],
+  )
+
+  const barTitle = activeBar
+    ? byMonth
+      ? monthLabel(parseISO(activeBar + '-01'))
+      : dayLabel(activeBar)
+    : ''
 
   const upcoming = useMemo(
     () =>
@@ -202,42 +264,86 @@ export function Dashboard({ onAdd }: { onAdd: () => void }) {
                     total={sums.expense}
                     caption={range.label.toLowerCase()}
                     activeId={activeSlice}
+                    onSelect={pickSlice}
+                    center={
+                      selectedSlice ? (
+                        <>
+                          <span
+                            className="tnum text-[20px] leading-none font-bold tracking-[-0.03em]"
+                            style={{ color: selectedSlice.category.color }}
+                          >
+                            {compactMoney(selectedSlice.total)}
+                          </span>
+                          <span className="line-clamp-2 text-[12px] leading-tight text-dim">
+                            {selectedSlice.category.name}
+                          </span>
+                          <span className="text-[11px] text-faint">
+                            {Math.round(selectedSlice.share * 100)}% расходов
+                          </span>
+                        </>
+                      ) : undefined
+                    }
                   />
                   <ul className="flex w-full flex-col gap-3">
-                    {slices.slice(0, 6).map((slice) => (
-                      <li key={slice.category.id}>
-                        <Link
-                          to={`/transactions?category=${slice.category.id}`}
-                          onPointerEnter={() => setActiveSlice(slice.category.id)}
-                          onPointerLeave={() => setActiveSlice(null)}
-                          className="flex items-center gap-3"
-                        >
-                          <Badge
-                            icon={slice.category.icon}
-                            color={slice.category.color}
-                            size={34}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-baseline justify-between gap-2">
-                              <span className="truncate text-[14px] font-medium">
-                                {slice.category.name}
+                    {slices.slice(0, 6).map((slice) => {
+                      const on = activeSlice === slice.category.id
+                      return (
+                        <li key={slice.category.id}>
+                          <button
+                            type="button"
+                            onClick={() => pickSlice(on ? null : slice.category.id)}
+                            aria-pressed={on}
+                            className="flex w-full items-center gap-3 text-left"
+                          >
+                            <Badge
+                              icon={slice.category.icon}
+                              color={slice.category.color}
+                              size={34}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-baseline justify-between gap-2">
+                                <span
+                                  className={cx(
+                                    'truncate text-[14px]',
+                                    on ? 'font-semibold' : 'font-medium',
+                                  )}
+                                >
+                                  {slice.category.name}
+                                </span>
+                                <span className="tnum shrink-0 text-[14px] font-semibold">
+                                  {money(slice.total)}
+                                </span>
                               </span>
-                              <span className="tnum shrink-0 text-[14px] font-semibold">
-                                {money(slice.total)}
+                              <span className="mt-1.5 flex items-center gap-2">
+                                <ShareBar share={slice.share} color={slice.category.color} />
+                                <span className="tnum w-9 shrink-0 text-right text-[11.5px] text-faint">
+                                  {Math.round(slice.share * 100)}%
+                                </span>
                               </span>
                             </span>
-                            <span className="mt-1.5 flex items-center gap-2">
-                              <ShareBar share={slice.share} color={slice.category.color} />
-                              <span className="tnum w-9 shrink-0 text-right text-[11.5px] text-faint">
-                                {Math.round(slice.share * 100)}%
-                              </span>
-                            </span>
-                          </span>
-                        </Link>
-                      </li>
-                    ))}
+                          </button>
+                        </li>
+                      )
+                    })}
                   </ul>
                 </Card>
+
+                <AnimatePresence initial={false}>
+                  {selectedSlice && (
+                    <TxDrill
+                      key={selectedSlice.category.id}
+                      title={selectedSlice.category.name}
+                      color={selectedSlice.category.color}
+                      icon={selectedSlice.category.icon}
+                      items={sliceItems}
+                      categories={categoryIndex}
+                      accounts={accountIndex}
+                      onClose={() => pickSlice(null)}
+                      moreLink={`/transactions?category=${selectedSlice.category.id}`}
+                      onDelete={deleteTransaction}
+                    />
+                  )}
+                </AnimatePresence>
               </section>
             )}
 
@@ -245,8 +351,28 @@ export function Dashboard({ onAdd }: { onAdd: () => void }) {
               <section>
                 <SectionTitle>{byMonth ? 'Расходы по месяцам' : 'Расходы по дням'}</SectionTitle>
                 <Card>
-                  <Bars points={bars} />
+                  <Bars
+                    points={bars}
+                    activeKey={activeBar}
+                    onSelect={pickBar}
+                    unit={byMonth ? 'месяцам' : 'дням'}
+                  />
                 </Card>
+
+                <AnimatePresence initial={false}>
+                  {activeBar && (
+                    <TxDrill
+                      key={activeBar}
+                      title={barTitle}
+                      color="var(--accent)"
+                      items={barItems}
+                      categories={categoryIndex}
+                      accounts={accountIndex}
+                      onClose={() => pickBar(null)}
+                      onDelete={deleteTransaction}
+                    />
+                  )}
+                </AnimatePresence>
               </section>
             )}
           </>

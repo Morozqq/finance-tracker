@@ -17,6 +17,7 @@ export function App() {
   const { needsAuth, error } = useApp()
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
+  const [drillOpen, setDrillOpen] = useState(false)
   const location = useLocation()
   const reduce = useReducedMotion()
 
@@ -48,7 +49,7 @@ export function App() {
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         >
           <Routes location={location}>
-            <Route path="/" element={<Dashboard onAdd={openNew} />} />
+            <Route path="/" element={<Dashboard onAdd={openNew} onDrill={setDrillOpen} />} />
             <Route
               path="/transactions"
               element={<Transactions onAdd={openNew} onEdit={openEdit} />}
@@ -58,12 +59,12 @@ export function App() {
             <Route path="/more/recurring" element={<Recurring />} />
             <Route path="/more/categories" element={<Categories />} />
             <Route path="/more/accounts" element={<Accounts />} />
-            <Route path="*" element={<Dashboard onAdd={openNew} />} />
+            <Route path="*" element={<Dashboard onAdd={openNew} onDrill={setDrillOpen} />} />
           </Routes>
         </motion.div>
       </AnimatePresence>
 
-      <TabBar onAdd={openNew} />
+      <TabBar onAdd={openNew} hideAdd={drillOpen} />
 
       <AmountSheet
         open={sheetOpen}

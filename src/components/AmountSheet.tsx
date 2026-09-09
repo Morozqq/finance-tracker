@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Backspace, CaretDown, Check } from '@phosphor-icons/react'
+import { Backspace, CaretDown, Check, Trash } from '@phosphor-icons/react'
 import { format, subDays } from 'date-fns'
 import { Sheet } from './Sheet'
 import { Badge, Button, Segmented, cx, inputClass } from './ui'
@@ -19,7 +19,7 @@ export function AmountSheet({
   onClose: () => void
   editing?: Transaction | null
 }) {
-  const { data, addTransaction, updateTransaction } = useApp()
+  const { data, addTransaction, updateTransaction, deleteTransaction } = useApp()
   const [kind, setKind] = useState<TxKind>('expense')
   const [digits, setDigits] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -28,6 +28,7 @@ export function AmountSheet({
   const [note, setNote] = useState('')
   const [details, setDetails] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const categories = useMemo(
     () =>
@@ -39,6 +40,7 @@ export function AmountSheet({
   useEffect(() => {
     if (!open) return
     setDetails(false)
+    setConfirmDelete(false)
     if (editing) {
       setKind(editing.kind)
       setDigits(String(editing.amount))
@@ -246,11 +248,41 @@ export function AmountSheet({
         </div>
 
         {/* Sticky so the primary action stays reachable on short screens. */}
-        <div className="sticky bottom-0 -mx-5 bg-surface px-5 pt-1.5 pb-1">
+        <div className="sticky bottom-0 -mx-5 flex flex-col gap-2 bg-surface px-5 pt-1.5 pb-1">
           <Button onClick={save} disabled={!canSave} className="w-full">
             <Check size={19} weight="bold" />
             {editing ? 'Сохранить' : 'Добавить'}
           </Button>
+
+          {editing &&
+            (confirmDelete ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="danger"
+                  className="flex-1"
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true)
+                    try {
+                      await deleteTransaction(editing.id)
+                      onClose()
+                    } finally {
+                      setSaving(false)
+                    }
+                  }}
+                >
+                  Да, удалить
+                </Button>
+                <Button variant="soft" className="flex-1" onClick={() => setConfirmDelete(false)}>
+                  Отмена
+                </Button>
+              </div>
+            ) : (
+              <Button variant="ghost" className="w-full" onClick={() => setConfirmDelete(true)}>
+                <Trash size={17} weight="bold" />
+                Удалить операцию
+              </Button>
+            ))}
         </div>
       </div>
     </Sheet>

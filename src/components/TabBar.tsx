@@ -1,5 +1,6 @@
 import { ChartPieSlice, DotsThreeCircle, Plus, Receipt, Target } from '@phosphor-icons/react'
 import { NavLink } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { cx } from './ui'
 
 const TABS = [
@@ -9,21 +10,27 @@ const TABS = [
   { to: '/more', label: 'Ещё', Icon: DotsThreeCircle },
 ]
 
-export function TabBar({ onAdd }: { onAdd: () => void }) {
+export function TabBar({ onAdd, hideAdd = false }: { onAdd: () => void; hideAdd?: boolean }) {
   return (
     <>
-      <button
+      {/* Уходит с дороги, когда под графиком открыт разбор: там в правом
+          нижнем углу живут кнопки удаления. */}
+      <motion.button
         type="button"
         onClick={onAdd}
         aria-label="Добавить операцию"
-        className="fixed right-5 z-40 grid size-14 place-items-center rounded-full bg-accent text-accent-ink transition active:scale-95"
+        tabIndex={hideAdd ? -1 : 0}
+        animate={{ scale: hideAdd ? 0 : 1, opacity: hideAdd ? 0 : 1 }}
+        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+        className="fixed right-5 z-40 grid size-14 place-items-center rounded-full bg-accent text-accent-ink active:scale-95"
         style={{
           bottom: 'calc(78px + env(safe-area-inset-bottom))',
           boxShadow: 'var(--shadow-fab)',
+          pointerEvents: hideAdd ? 'none' : 'auto',
         }}
       >
         <Plus size={26} weight="bold" />
-      </button>
+      </motion.button>
 
       <nav
         className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/90 backdrop-blur-xl"
