@@ -1,0 +1,258 @@
+import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { Backspace, CaretDown, Check } from '@phosphor-icons/react'
+import { format, subDays } from 'date-fns'
+import { Sheet } from './Sheet'
+import { Badge, Button, Segmented, cx, inputClass } from './ui'
+import { useApp } from '../data/store'
+import { dayLabel, num, todayISO } from '../lib/format'
+import type { Transaction, TxKind } from '../lib/types'
+
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', 'back'] as const
+
+export function AmountSheet({
+  open,
+  onClose,
+  editing,
+}: {
+  open: boolean
+  onClose: () => void
+  editing?: Transaction | null
+}) {
+  const { data, addTransaction, updateTransaction } = useApp()
+  const [kind, setKind] = useState<TxKind>('expense')
+  const [digits, setDigits] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [accountId, setAccountId] = useState('')
+  const [date, setDate] = useState(todayISO())
+  const [note, setNote] = useState('')
+  const [details, setDetails] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const categories = useMemo(
+    () =>
+      data.categories.filter((c) => c.kind === kind && !c.archived).sort((a, b) => a.sort - b.sort),
+    [data.categories, kind],
+  )
+  const accounts = useMemo(() => data.accounts.filter((a) => !a.archived), [data.accounts])
+
+  useEffect(() => {
+    if (!open) return
+    setDetails(false)
+    if (editing) {
+      setKind(editing.kind)
+      setDigits(String(editing.amount))
+      setCategoryId(editing.categoryId)
+      setAccountId(editing.accountId)
+      setDate(editing.occurredAt)
+      setNote(editing.note ?? '')
+    } else {
+      setKind('expense')
+      setDigits('')
+      setCategoryId('')
+      setAccountId(data.accounts[0]?.id ?? '')
+      setDate(todayISO())
+      setNote('')
+    }
+  }, [open, editing, data.accounts])
+
+  // Keep the chosen category valid when the kind flips.
+  useEffect(() => {
+    if (categoryId && !categories.some((c) => c.id === categoryId)) setCategoryId('')
+  }, [categories, categoryId])
+
+  const amount = Number(digits || '0')
+  const canSave = amount > 0 && Boolean(categoryId) && Boolean(accountId) && !saving
+
+  const press = (key: (typeof KEYS)[number]) => {
+    navigator.vibrate?.(8)
+    if (key === 'back') {
+      setDigits((d) => d.slice(0, -1))
+      return
+    }
+    setDigits((d) => {
+      const next = (d + key).replace(/^0+/, '')
+      return next.length > 12 ? d : next
+    })
+  }
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    try {
+      const payload = {
+        kind,
+        amount,
+        categoryId,
+        accountId,
+        occurredAt: date,
+        note: note.trim() || undefined,
+      }
+      if (editing) await updateTransaction({ ...editing, ...payload })
+      else await addTransaction(payload)
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const accountName = accounts.find((a) => a.id === accountId)?.name ?? ''
+  const dateChips = [
+    { value: todayISO(), label: 'Сегодня' },
+    { value: format(subDays(new Date(), 1), 'yyyy-MM-dd'), label: 'Вчера' },
+  ]
+  const chip = (active: boolean) =>
+    cx(
+      'rounded-full px-3.5 py-1.5 text-[13px] font-medium transition active:scale-95',
+      active ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-dim',
+    )
+
+  return (
+    <Sheet open={open} onClose={onClose} full title={editing ? 'Изменить операцию' : undefined}>
+      <div className="flex flex-col gap-3 pt-1">
+        <Segmented
+          value={kind}
+          onChange={setKind}
+          options={[
+            { value: 'expense', label: 'Расход' },
+            { value: 'income', label: 'Доход' },
+          ]}
+        />
+
+        <div className="flex items-baseline justify-center gap-1.5">
+          <span
+            className={cx(
+              'tnum text-[40px] leading-none font-bold tracking-[-0.04em]',
+              amount > 0 ? (kind === 'income' ? 'text-pos' : 'text-ink') : 'text-faint',
+            )}
+          >
+            {digits ? num(amount) : '0'}
+          </span>
+          <span className="text-[24px] leading-none font-semibold text-dim">₸</span>
+        </div>
+
+        <div className="grid grid-cols-4 gap-1.5">
+          {categories.map((category) => {
+            const active = category.id === categoryId
+            return (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => setCategoryId(category.id)}
+                aria-pressed={active}
+                className={cx(
+                  'flex flex-col items-center gap-1 rounded-[var(--r-md)] px-1 py-1.5 transition active:scale-95',
+                  active ? 'bg-surface-2' : '',
+                )}
+                style={active ? { boxShadow: `inset 0 0 0 2px ${category.color}` } : undefined}
+              >
+                <Badge icon={category.icon} color={category.color} size={34} />
+                <span className="w-full truncate text-center text-[10.5px] text-dim">
+                  {category.name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Account, date and note are set once and rarely changed, so they
+            collapse into a summary line and leave the keypad room to breathe. */}
+        <button
+          type="button"
+          onClick={() => setDetails((d) => !d)}
+          aria-expanded={details}
+          className="flex items-center gap-2 rounded-[var(--r-md)] bg-surface-2 px-3.5 py-2 text-[13px]"
+        >
+          <span className="min-w-0 flex-1 truncate text-left text-dim">
+            {accountName} · {dayLabel(date)}
+            {note.trim() ? ` · ${note.trim()}` : ''}
+          </span>
+          <CaretDown
+            size={14}
+            weight="bold"
+            className={cx('shrink-0 text-faint transition-transform', details && 'rotate-180')}
+          />
+        </button>
+
+        <AnimatePresence initial={false}>
+          {details && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="flex flex-col gap-2.5 pb-1">
+                <div className="flex flex-wrap gap-2">
+                  {accounts.map((account) => (
+                    <button
+                      key={account.id}
+                      type="button"
+                      onClick={() => setAccountId(account.id)}
+                      className={chip(account.id === accountId)}
+                    >
+                      {account.name}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {dateChips.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setDate(item.value)}
+                      className={chip(date === item.value)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                  <input
+                    type="date"
+                    value={date}
+                    max={todayISO()}
+                    onChange={(e) => setDate(e.target.value)}
+                    aria-label="Дата операции"
+                    className="h-[34px] rounded-full bg-surface-2 px-3 text-[13px] text-dim outline-none focus:ring-2 focus:ring-accent"
+                  />
+                </div>
+
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Комментарий"
+                  aria-label="Комментарий"
+                  className={cx(inputClass, 'h-11')}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="grid grid-cols-3 gap-1.5">
+          {KEYS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => press(key)}
+              aria-label={key === 'back' ? 'Стереть' : key}
+              className="grid h-[46px] place-items-center rounded-[var(--r-md)] bg-surface-2 text-[20px] font-semibold transition active:scale-95 active:bg-surface-3"
+            >
+              {key === 'back' ? <Backspace size={21} weight="bold" /> : key}
+            </button>
+          ))}
+        </div>
+
+        {/* Sticky so the primary action stays reachable on short screens. */}
+        <div className="sticky bottom-0 -mx-5 bg-surface px-5 pt-1.5 pb-1">
+          <Button onClick={save} disabled={!canSave} className="w-full">
+            <Check size={19} weight="bold" />
+            {editing ? 'Сохранить' : 'Добавить'}
+          </Button>
+        </div>
+      </div>
+    </Sheet>
+  )
+}

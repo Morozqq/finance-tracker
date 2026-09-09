@@ -1,0 +1,193 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------
+   Design tokens. Light palette is the base; dark overrides only
+   the values, so every component styles through the token names.
+   --------------------------------------------------------------- */
+:root {
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #f0f0ed;
+  --surface-3: #e6e6e2;
+  --border: #dededa;
+  --border-strong: #c9c9c3;
+
+  --text: #16181c;
+  --text-dim: #5e646e;
+  --text-faint: #8b919b;
+
+  --accent: #d4551f;
+  --accent-soft: #fbe8dd;
+  --accent-ink: #ffffff;
+
+  --positive: #12855a;
+  --positive-soft: #dff2e9;
+  --negative: #c8343f;
+  --negative-soft: #fbe4e5;
+
+  --shadow-sheet: 0 -8px 40px rgb(22 24 28 / 0.14);
+  --shadow-lift: 0 2px 10px rgb(22 24 28 / 0.07);
+  --shadow-fab: 0 6px 22px rgb(212 85 31 / 0.34);
+
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-sheet: 28px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0c0d10;
+    --surface: #14161b;
+    --surface-2: #1c1f26;
+    --surface-3: #262a33;
+    --border: #2b303a;
+    --border-strong: #3a4049;
+
+    --text: #f0f2f5;
+    --text-dim: #98a0ae;
+    --text-faint: #626a78;
+
+    --accent: #ff8a4c;
+    --accent-soft: #35210f;
+    --accent-ink: #1a0e06;
+
+    --positive: #4ecb8f;
+    --positive-soft: #11291f;
+    --negative: #f2565f;
+    --negative-soft: #2d1417;
+
+    --shadow-sheet: 0 -8px 40px rgb(0 0 0 / 0.55);
+    --shadow-lift: 0 2px 10px rgb(0 0 0 / 0.3);
+    --shadow-fab: 0 6px 22px rgb(255 138 76 / 0.28);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0c0d10;
+  --surface: #14161b;
+  --surface-2: #1c1f26;
+  --surface-3: #262a33;
+  --border: #2b303a;
+  --border-strong: #3a4049;
+
+  --text: #f0f2f5;
+  --text-dim: #98a0ae;
+  --text-faint: #626a78;
+
+  --accent: #ff8a4c;
+  --accent-soft: #35210f;
+  --accent-ink: #1a0e06;
+
+  --positive: #4ecb8f;
+  --positive-soft: #11291f;
+  --negative: #f2565f;
+  --negative-soft: #2d1417;
+
+  --shadow-sheet: 0 -8px 40px rgb(0 0 0 / 0.55);
+  --shadow-lift: 0 2px 10px rgb(0 0 0 / 0.3);
+  --shadow-fab: 0 6px 22px rgb(255 138 76 / 0.28);
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+
+  --color-ink: var(--text);
+  --color-dim: var(--text-dim);
+  --color-faint: var(--text-faint);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+
+  --color-pos: var(--positive);
+  --color-pos-soft: var(--positive-soft);
+  --color-neg: var(--negative);
+  --color-neg-soft: var(--negative-soft);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-sheet: var(--r-sheet);
+
+  --font-sans: 'Onest', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/* --------------------------------------------------------------- */
+
+/* These resets must live in @layer base. Unlayered rules outrank everything
+   inside a cascade layer, so an unlayered `button { color: inherit }` would
+   silently beat Tailwind's own text-colour utilities. */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Onest', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-synthesis-weight: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* Numbers line up in columns everywhere they are compared. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Tap highlight belongs to our own :active states, not the browser's. */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbars on horizontal rails without losing scrollability. */
+.no-bar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-bar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
