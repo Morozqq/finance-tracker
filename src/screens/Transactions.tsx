@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../data/store'
 import { Button, Empty, Screen, Segmented, Skeleton, cx, inputClass } from '../components/ui'
 import { TransactionRow } from '../components/TransactionRow'
-import { groupByDay, inRange, rangeFor, totals, type Period } from '../lib/analytics'
+import { groupByDay, inRange, periodOptions, rangeFor, totals, type Period } from '../lib/analytics'
 import { dayLabel, money, plural } from '../lib/format'
 import type { Transaction } from '../lib/types'
 
@@ -58,16 +58,7 @@ export function Transactions({
   return (
     <Screen title="Операции">
       <div className="flex flex-col gap-4">
-        <Segmented
-          value={period}
-          onChange={setPeriod}
-          options={[
-            { value: 'month', label: 'Месяц' },
-            { value: 'prev', label: 'Прошлый' },
-            { value: 'year', label: 'Год' },
-            { value: 'all', label: 'Всё' },
-          ]}
-        />
+        <Segmented value={period} onChange={setPeriod} options={periodOptions()} />
 
         <div className="relative">
           <MagnifyingGlass

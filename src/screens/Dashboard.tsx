@@ -12,6 +12,7 @@ import {
   inRange,
   monthlySeries,
   netWorth,
+  periodOptions,
   rangeFor,
   totals,
   type Period,
@@ -145,16 +146,7 @@ export function Dashboard({ onAdd }: { onAdd: () => void }) {
           </div>
         </section>
 
-        <Segmented
-          value={period}
-          onChange={setPeriod}
-          options={[
-            { value: 'month', label: 'Месяц' },
-            { value: 'prev', label: 'Прошлый' },
-            { value: 'year', label: 'Год' },
-            { value: 'all', label: 'Всё' },
-          ]}
-        />
+        <Segmented value={period} onChange={setPeriod} options={periodOptions()} />
 
         <div className="grid grid-cols-2 gap-3">
           <Card>

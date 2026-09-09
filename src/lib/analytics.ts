@@ -8,6 +8,7 @@ import {
   startOfYear,
   subMonths,
 } from 'date-fns'
+import { ru } from 'date-fns/locale'
 import type { Account, Category, GoalContribution, Transaction, TxKind } from './types'
 
 export type Period = 'month' | 'prev' | 'year' | 'all'
@@ -33,6 +34,20 @@ export function rangeFor(period: Period, now = new Date()): Range {
     case 'all':
       return { from: '0000-01-01', to: '9999-12-31', label: 'Всё время' }
   }
+}
+
+/**
+ * Названия месяцев вместо «Месяц» и «Прошлый»: рядом с кнопкой «Год» слово
+ * «Прошлый» читалось как «прошлый год».
+ */
+export function periodOptions(now = new Date()): Array<{ value: Period; label: string }> {
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+  return [
+    { value: 'month', label: cap(format(now, 'LLLL', { locale: ru })) },
+    { value: 'prev', label: cap(format(subMonths(now, 1), 'LLLL', { locale: ru })) },
+    { value: 'year', label: 'Год' },
+    { value: 'all', label: 'Всё' },
+  ]
 }
 
 export function inRange(tx: Transaction, range: Range): boolean {
