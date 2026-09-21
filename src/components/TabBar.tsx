@@ -1,4 +1,4 @@
-import { ChartPieSlice, DotsThreeCircle, Plus, Receipt, Target } from '@phosphor-icons/react'
+import { ChartPieSlice, DotsThreeCircle, ListChecks, Plus, Receipt, Target } from '@phosphor-icons/react'
 import { NavLink } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { cx } from './ui'
@@ -7,10 +7,19 @@ const TABS = [
   { to: '/', label: 'Обзор', Icon: ChartPieSlice },
   { to: '/transactions', label: 'Операции', Icon: Receipt },
   { to: '/goals', label: 'Цели', Icon: Target },
+  { to: '/tasks', label: 'Задачи', Icon: ListChecks },
   { to: '/more', label: 'Ещё', Icon: DotsThreeCircle },
 ]
 
-export function TabBar({ onAdd, hideAdd = false }: { onAdd: () => void; hideAdd?: boolean }) {
+export function TabBar({
+  onAdd,
+  hideAdd = false,
+  addLabel = 'Добавить операцию',
+}: {
+  onAdd: () => void
+  hideAdd?: boolean
+  addLabel?: string
+}) {
   return (
     <>
       {/* Уходит с дороги, когда под графиком открыт разбор: там в правом
@@ -18,7 +27,7 @@ export function TabBar({ onAdd, hideAdd = false }: { onAdd: () => void; hideAdd?
       <motion.button
         type="button"
         onClick={onAdd}
-        aria-label="Добавить операцию"
+        aria-label={addLabel}
         tabIndex={hideAdd ? -1 : 0}
         animate={{ scale: hideAdd ? 0 : 1, opacity: hideAdd ? 0 : 1 }}
         transition={{ type: 'spring', stiffness: 420, damping: 32 }}

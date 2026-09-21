@@ -1,5 +1,6 @@
-import { useMemo, type ReactNode } from 'react'
+import { Fragment, useMemo, type ReactNode } from 'react'
 import { compactMoney, money, num } from '../lib/format'
+import { cx } from './ui'
 
 interface Slice {
   id: string
@@ -216,6 +217,95 @@ export function ShareBar({ share, color }: { share: number; color: string }) {
   )
 }
 
+const HEAT = ['bg-heat-0', 'bg-heat-1', 'bg-heat-2', 'bg-heat-3', 'bg-heat-4']
+const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+const ROW_LABELS = ['Пн', '', 'Ср', '', 'Пт', '', '']
+
+/**
+ * GitHub-style activity grid: one column per Monday-first week, one square per
+ * day, greener the more of the day got done. Each square is a button, so a tap
+ * reports the day.
+ */
+export function Heatmap({
+  weeks,
+  levelOf,
+  labelOf,
+  activeDay,
+  onSelect,
+  caption,
+}: {
+  weeks: Array<Array<string | null>>
+  levelOf: (day: string) => number
+  labelOf: (day: string) => string
+  activeDay?: string | null
+  onSelect?: (day: string) => void
+  caption?: ReactNode
+}) {
+  // A month is named over the week it starts in. The very first column is
+  // named only when the next change is far enough away not to collide.
+  const monthOf = (w: number) => Number(weeks[w][0]!.slice(5, 7)) - 1
+  const labels = weeks.map((_, w) => {
+    if (w === 0) {
+      const nextChange = weeks.findIndex((_, i) => i > 0 && monthOf(i) !== monthOf(0))
+      return nextChange === -1 || nextChange >= 3 ? MONTHS[monthOf(0)] : ''
+    }
+    return monthOf(w) !== monthOf(w - 1) ? MONTHS[monthOf(w)] : ''
+  })
+
+  return (
+    <div>
+      <div
+        className="grid gap-[3px]"
+        style={{ gridTemplateColumns: `auto repeat(${weeks.length}, minmax(0, 1fr))` }}
+      >
+        <span />
+        {labels.map((label, w) => (
+          <span key={w} className="h-4 overflow-visible text-[10px] whitespace-nowrap text-faint">
+            {label}
+          </span>
+        ))}
+
+        {ROW_LABELS.map((rowLabel, d) => (
+          <Fragment key={d}>
+            <span className="pr-1 text-[10px] leading-none text-faint self-center">{rowLabel}</span>
+            {weeks.map((week, w) => {
+              const day = week[d]
+              if (!day) return <span key={w} />
+              const active = activeDay === day
+              return (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => onSelect?.(day)}
+                  disabled={!onSelect}
+                  aria-pressed={active}
+                  aria-label={labelOf(day)}
+                  className={cx(
+                    'aspect-square w-full rounded-[3px] transition',
+                    HEAT[levelOf(day)] ?? HEAT[0],
+                    active && 'ring-[1.5px] ring-ink',
+                  )}
+                />
+              )
+            })}
+          </Fragment>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-[11px] text-faint">
+        <span className="min-w-0">{caption}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-[3px]" aria-hidden="true">
+          Меньше
+          {HEAT.map((cls) => (
+            <span key={cls} className={cx('mx-[1px] size-2.5 rounded-[2px]', cls)} />
+          ))}
+          Больше
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /** Ring used on goal cards. */
 export function ProgressRing({
   progress,
@@ -245,16 +335,19 @@ export function ProgressRing({
             stroke="var(--surface-2)"
             strokeWidth={thickness}
           />
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke={color}
-            strokeWidth={thickness}
-            strokeLinecap="round"
-            strokeDasharray={`${filled} ${circumference - filled}`}
-          />
+          {/* A zero-length arc with a round cap would still paint a dot. */}
+          {filled > 0 && (
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={color}
+              strokeWidth={thickness}
+              strokeLinecap="round"
+              strokeDasharray={`${filled} ${circumference - filled}`}
+            />
+          )}
         </g>
       </svg>
       <div className="absolute">{children}</div>

@@ -7,6 +7,8 @@ import type {
   RecurringRule,
   Settings,
   Snapshot,
+  Task,
+  TaskTemplate,
   Transaction,
 } from '../lib/types'
 import { requireClient } from './supabase'
@@ -20,6 +22,8 @@ const TABLE: Record<TableKey, string> = {
   recurring: 'recurring_rules',
   goals: 'goals',
   contributions: 'goal_contributions',
+  tasks: 'tasks',
+  taskTemplates: 'task_templates',
 }
 
 type Row = Record<string, unknown>
@@ -89,6 +93,23 @@ const toDb = {
     occurred_at: c.occurredAt,
     created_at: c.createdAt,
   }),
+  tasks: (t: Task, user_id: string) => ({
+    id: t.id,
+    user_id,
+    title: t.title,
+    day: t.day,
+    done: t.done,
+    template_id: t.templateId ?? null,
+    created_at: t.createdAt,
+  }),
+  taskTemplates: (t: TaskTemplate, user_id: string) => ({
+    id: t.id,
+    user_id,
+    title: t.title,
+    weekdays: t.weekdays,
+    next_day: t.nextDay,
+    created_at: t.createdAt,
+  }),
 }
 
 const fromDb = {
@@ -150,6 +171,31 @@ const fromDb = {
     occurredAt: r.occurred_at as string,
     createdAt: r.created_at as string,
   }),
+  tasks: (r: Row): Task => ({
+    id: r.id as string,
+    title: r.title as string,
+    day: r.day as string,
+    done: Boolean(r.done),
+    templateId: (r.template_id as string) ?? undefined,
+    createdAt: r.created_at as string,
+  }),
+  taskTemplates: (r: Row): TaskTemplate => ({
+    id: r.id as string,
+    title: r.title as string,
+    weekdays: ((r.weekdays as number[]) ?? []).map(Number),
+    nextDay: r.next_day as string,
+    createdAt: r.created_at as string,
+  }),
+}
+
+/**
+ * Task tables came after the first schema. Until schema.sql is re-run they do
+ * not exist, and the finance screens must keep working in the meantime.
+ */
+function optionalRows(result: { data: Row[] | null; error: { code?: string; message: string } | null }): Row[] {
+  if (!result.error) return result.data ?? []
+  if (result.error.code === '42P01' || result.error.code === 'PGRST205') return []
+  throw new Error(result.error.message)
 }
 
 export class SupabaseRepo implements Repo {
@@ -162,7 +208,7 @@ export class SupabaseRepo implements Repo {
 
   async load(): Promise<Snapshot> {
     const db = requireClient()
-    const [cats, accs, txs, recs, goals, contribs, settings] = await Promise.all([
+    const [cats, accs, txs, recs, goals, contribs, settings, tasks, templates] = await Promise.all([
       db.from('categories').select('*').order('sort_order'),
       db.from('accounts').select('*').order('name'),
       db.from('transactions').select('*').order('occurred_at', { ascending: false }),
@@ -170,6 +216,9 @@ export class SupabaseRepo implements Repo {
       db.from('goals').select('*').order('created_at'),
       db.from('goal_contributions').select('*').order('occurred_at'),
       db.from('app_settings').select('*').eq('user_id', this.userId).maybeSingle(),
+      // Newest first: if the row cap ever bites, it is old history that drops.
+      db.from('tasks').select('*').order('day', { ascending: false }),
+      db.from('task_templates').select('*').order('created_at'),
     ])
 
     const failure = [cats, accs, txs, recs, goals, contribs].find((r) => r.error)
@@ -182,6 +231,8 @@ export class SupabaseRepo implements Repo {
       recurring: (recs.data ?? []).map(fromDb.recurring),
       goals: (goals.data ?? []).map(fromDb.goals),
       contributions: (contribs.data ?? []).map(fromDb.contributions),
+      tasks: optionalRows(tasks).map(fromDb.tasks),
+      taskTemplates: optionalRows(templates).map(fromDb.taskTemplates),
       settings: {
         theme: (settings.data?.theme as Settings['theme']) ?? 'system',
         monthStartDay: (settings.data?.month_start_day as number) ?? 1,
@@ -237,6 +288,8 @@ export class SupabaseRepo implements Repo {
       this.putMany('goals', snapshot.goals),
     ])
     await this.putMany('contributions', snapshot.contributions)
+    await this.putMany('taskTemplates', snapshot.taskTemplates)
+    await this.putMany('tasks', snapshot.tasks)
     await this.saveSettings(snapshot.settings)
   }
 

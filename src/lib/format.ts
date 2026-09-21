@@ -44,6 +44,14 @@ export function dayLabel(iso: string): string {
   return format(d, sameYear ? 'd MMMM' : 'd MMMM yyyy', { locale: ru })
 }
 
+/** "Понедельник, 21 сентября" / "Понедельник, 21 сентября 2025" */
+export function fullDayLabel(iso: string): string {
+  const d = parseISO(iso)
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  const text = format(d, sameYear ? 'EEEE, d MMMM' : 'EEEE, d MMMM yyyy', { locale: ru })
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
 /** "март 2026" */
 export function monthLabel(date: Date): string {
   return format(date, 'LLLL yyyy', { locale: ru })

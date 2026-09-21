@@ -92,6 +92,8 @@ function migrate(stored: Snapshot): Snapshot {
     recurring: stored.recurring ?? [],
     goals: stored.goals ?? [],
     contributions: stored.contributions ?? [],
+    tasks: stored.tasks ?? [],
+    taskTemplates: stored.taskTemplates ?? [],
     settings: {
       theme: stored.settings?.theme ?? 'system',
       monthStartDay: stored.settings?.monthStartDay ?? 1,

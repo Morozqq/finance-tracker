@@ -210,6 +210,8 @@ export function demoSnapshot(): Snapshot {
     recurring,
     goals,
     contributions,
+    tasks: [],
+    taskTemplates: [],
     settings: { theme: 'system', monthStartDay: 1, demo: true },
   }
 }
@@ -222,6 +224,8 @@ export function emptySnapshot(): Snapshot {
     recurring: [],
     goals: [],
     contributions: [],
+    tasks: [],
+    taskTemplates: [],
     settings: { theme: 'system', monthStartDay: 1, demo: false },
   }
 }

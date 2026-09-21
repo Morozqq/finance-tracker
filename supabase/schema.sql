@@ -84,6 +84,27 @@ create table if not exists public.goal_contributions (
   created_at  timestamptz not null default now()
 );
 
+create table if not exists public.task_templates (
+  id         text primary key,
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  title      text not null,
+  -- Дни недели как в JS Date.getDay(): 0 — воскресенье … 6 — суббота.
+  weekdays   smallint[] not null check (cardinality(weekdays) > 0),
+  -- С этого дня начнётся следующее создание задач; всё до него уже создано.
+  next_day   date not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.tasks (
+  id          text primary key,
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  title       text not null,
+  day         date not null,
+  done        boolean not null default false,
+  template_id text references public.task_templates (id) on delete set null,
+  created_at  timestamptz not null default now()
+);
+
 -- ---------------------------------------------------------------- индексы
 
 create index if not exists transactions_user_date_idx
@@ -94,6 +115,8 @@ create index if not exists recurring_user_next_idx
   on public.recurring_rules (user_id, next_run_at);
 create index if not exists contributions_goal_idx
   on public.goal_contributions (goal_id);
+create index if not exists tasks_user_day_idx
+  on public.tasks (user_id, day desc);
 
 -- ------------------------------------------------------------------- RLS
 
@@ -104,6 +127,8 @@ alter table public.recurring_rules     enable row level security;
 alter table public.transactions        enable row level security;
 alter table public.goals               enable row level security;
 alter table public.goal_contributions  enable row level security;
+alter table public.task_templates      enable row level security;
+alter table public.tasks               enable row level security;
 
 do $$
 declare
@@ -111,7 +136,8 @@ declare
 begin
   foreach t in array array[
     'app_settings', 'categories', 'accounts',
-    'recurring_rules', 'transactions', 'goals', 'goal_contributions'
+    'recurring_rules', 'transactions', 'goals', 'goal_contributions',
+    'task_templates', 'tasks'
   ]
   loop
     execute format('drop policy if exists own_rows on public.%I', t);

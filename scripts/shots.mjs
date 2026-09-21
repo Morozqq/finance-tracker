@@ -67,6 +67,14 @@ await shot('03-transactions', 'transactions')
 await page.getByRole('link', { name: 'Цели' }).click()
 await shot('04-goals', 'goals')
 
+await page.getByRole('link', { name: 'Задачи' }).click()
+await page.getByRole('button', { name: 'Добавить задачу' }).last().click()
+await page.getByPlaceholder('Например, отжаться 20 раз').fill('Отжаться 20 раз')
+await page.getByRole('button', { name: 'Постоянная', exact: true }).click()
+await page.getByRole('button', { name: 'Добавить', exact: true }).click()
+await page.getByRole('checkbox', { name: 'Отжаться 20 раз' }).click()
+await shot('16-tasks', 'tasks')
+
 await page.getByRole('link', { name: 'Ещё' }).click()
 await shot('05-more', 'more')
 

@@ -6,6 +6,8 @@ import type {
   RecurringRule,
   Settings,
   Snapshot,
+  Task,
+  TaskTemplate,
   Transaction,
 } from '../lib/types'
 
@@ -17,6 +19,8 @@ export type TableKey =
   | 'recurring'
   | 'goals'
   | 'contributions'
+  | 'tasks'
+  | 'taskTemplates'
 
 export type RowOf<K extends TableKey> = K extends 'categories'
   ? Category
@@ -28,7 +32,11 @@ export type RowOf<K extends TableKey> = K extends 'categories'
         ? RecurringRule
         : K extends 'goals'
           ? Goal
-          : GoalContribution
+          : K extends 'tasks'
+            ? Task
+            : K extends 'taskTemplates'
+              ? TaskTemplate
+              : GoalContribution
 
 /**
  * One interface, two implementations. The screens never learn which one is

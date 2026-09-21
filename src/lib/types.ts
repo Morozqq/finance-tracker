@@ -72,6 +72,29 @@ export interface GoalContribution {
   createdAt: string
 }
 
+/** A standing task that puts itself on the list on chosen weekdays. */
+export interface TaskTemplate {
+  id: string
+  title: string
+  /** Weekdays it appears on, as Date.getDay(): 0 = Sunday … 6 = Saturday. */
+  weekdays: number[]
+  /** ISO calendar day the next spawn starts from; every day before it is done. */
+  nextDay: string
+  createdAt: string
+}
+
+/** One task on one calendar day. */
+export interface Task {
+  id: string
+  title: string
+  /** ISO calendar day the task belongs to, YYYY-MM-DD. */
+  day: string
+  done: boolean
+  /** Set when the task was spawned from a template. */
+  templateId?: string
+  createdAt: string
+}
+
 export interface Settings {
   theme: 'system' | 'light' | 'dark'
   /** Day the budgeting month rolls over on. 1 for calendar months. */
@@ -87,5 +110,7 @@ export interface Snapshot {
   recurring: RecurringRule[]
   goals: Goal[]
   contributions: GoalContribution[]
+  tasks: Task[]
+  taskTemplates: TaskTemplate[]
   settings: Settings
 }

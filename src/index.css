@@ -25,6 +25,13 @@
   --negative: #c8343f;
   --negative-soft: #fbe4e5;
 
+  /* Activity grid, GitHub's green scale. */
+  --heat-0: #e8e8e4;
+  --heat-1: #9be9a8;
+  --heat-2: #40c463;
+  --heat-3: #30a14e;
+  --heat-4: #216e39;
+
   --shadow-sheet: 0 -8px 40px rgb(22 24 28 / 0.14);
   --shadow-lift: 0 2px 10px rgb(22 24 28 / 0.07);
   --shadow-fab: 0 6px 22px rgb(212 85 31 / 0.34);
@@ -59,6 +66,12 @@
     --negative: #f2565f;
     --negative-soft: #2d1417;
 
+    --heat-0: #1f232b;
+    --heat-1: #0e4429;
+    --heat-2: #006d32;
+    --heat-3: #26a641;
+    --heat-4: #39d353;
+
     --shadow-sheet: 0 -8px 40px rgb(0 0 0 / 0.55);
     --shadow-lift: 0 2px 10px rgb(0 0 0 / 0.3);
     --shadow-fab: 0 6px 22px rgb(255 138 76 / 0.28);
@@ -88,6 +101,12 @@
   --negative: #f2565f;
   --negative-soft: #2d1417;
 
+  --heat-0: #1f232b;
+  --heat-1: #0e4429;
+  --heat-2: #006d32;
+  --heat-3: #26a641;
+  --heat-4: #39d353;
+
   --shadow-sheet: 0 -8px 40px rgb(0 0 0 / 0.55);
   --shadow-lift: 0 2px 10px rgb(0 0 0 / 0.3);
   --shadow-fab: 0 6px 22px rgb(255 138 76 / 0.28);
@@ -115,6 +134,12 @@
   --color-pos-soft: var(--positive-soft);
   --color-neg: var(--negative);
   --color-neg-soft: var(--negative-soft);
+
+  --color-heat-0: var(--heat-0);
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-heat-4: var(--heat-4);
 
   --radius-sm: var(--r-sm);
   --radius-md: var(--r-md);

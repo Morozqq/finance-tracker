@@ -9,6 +9,7 @@ import { Transactions } from './screens/Transactions'
 import { Goals } from './screens/Goals'
 import { More } from './screens/More'
 import { Recurring } from './screens/Recurring'
+import { Tasks } from './screens/Tasks'
 import { Accounts, Categories } from './screens/Catalog'
 import { SignIn } from './screens/SignIn'
 import type { Transaction } from './lib/types'
@@ -18,10 +19,14 @@ export function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [drillOpen, setDrillOpen] = useState(false)
+  const [taskSheetOpen, setTaskSheetOpen] = useState(false)
   const location = useLocation()
   const reduce = useReducedMotion()
 
   if (needsAuth) return <SignIn />
+
+  // On the tasks tab the round button adds a task; everywhere else, an operation.
+  const onTasks = location.pathname.startsWith('/tasks')
 
   const openNew = () => {
     setEditing(null)
@@ -55,6 +60,10 @@ export function App() {
               element={<Transactions onAdd={openNew} onEdit={openEdit} />}
             />
             <Route path="/goals" element={<Goals />} />
+            <Route
+              path="/tasks"
+              element={<Tasks adding={taskSheetOpen} onAddingChange={setTaskSheetOpen} />}
+            />
             <Route path="/more" element={<More />} />
             <Route path="/more/recurring" element={<Recurring />} />
             <Route path="/more/categories" element={<Categories />} />
@@ -64,7 +73,11 @@ export function App() {
         </motion.div>
       </AnimatePresence>
 
-      <TabBar onAdd={openNew} hideAdd={drillOpen} />
+      <TabBar
+        onAdd={onTasks ? () => setTaskSheetOpen(true) : openNew}
+        addLabel={onTasks ? 'Добавить задачу' : undefined}
+        hideAdd={drillOpen}
+      />
 
       <AmountSheet
         open={sheetOpen}

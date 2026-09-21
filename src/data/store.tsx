@@ -17,6 +17,8 @@ import type {
   RecurringRule,
   Settings,
   Snapshot,
+  Task,
+  TaskTemplate,
   Transaction,
 } from '../lib/types'
 import type { Repo } from './repo'
@@ -25,7 +27,16 @@ import { SupabaseRepo } from './supabaseRepo'
 import { hasCloud, supabase } from './supabase'
 import { emptySnapshot } from '../lib/seed'
 import { catchUp } from '../lib/recurring'
+import { spawnTasks } from '../lib/tasks'
 import { todayISO, uid } from '../lib/format'
+
+/** Swaps rows that share an id and appends the rest. */
+function replaceRows<T extends { id: string }>(list: T[], rows: T[]): T[] {
+  const byId = new Map(rows.map((row) => [row.id, row]))
+  const kept = list.map((item) => byId.get(item.id) ?? item)
+  const known = new Set(list.map((item) => item.id))
+  return [...kept, ...rows.filter((row) => !known.has(row.id))]
+}
 
 interface AppValue {
   ready: boolean
@@ -54,6 +65,15 @@ interface AppValue {
   saveGoal: (input: Omit<Goal, 'id' | 'createdAt'> & { id?: string }) => Promise<void>
   deleteGoal: (id: string) => Promise<void>
   contribute: (goalId: string, amount: number) => Promise<void>
+
+  addTask: (title: string) => Promise<void>
+  toggleTask: (id: string) => Promise<void>
+  renameTask: (id: string, title: string) => Promise<void>
+  deleteTask: (id: string) => Promise<void>
+  saveTemplate: (input: { id?: string; title: string; weekdays: number[] }) => Promise<void>
+  deleteTemplate: (id: string) => Promise<void>
+  /** Spawns standing tasks for days that arrived while the app stayed open. */
+  syncTasks: () => Promise<void>
 
   setTheme: (theme: Settings['theme']) => Promise<void>
   clearDemo: () => Promise<void>
@@ -112,21 +132,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     repo
       .load()
       .then(async (loaded) => {
+        let next: Snapshot = loaded
+
         // Post everything the recurring rules owe since the last visit.
         const run = catchUp(loaded.recurring)
         if (run.posted > 0) {
-          const next: Snapshot = {
-            ...loaded,
-            transactions: [...run.transactions, ...loaded.transactions],
+          next = {
+            ...next,
+            transactions: [...run.transactions, ...next.transactions],
             recurring: run.rules,
           }
           await repo.putMany('transactions', run.transactions)
           await repo.putMany('recurring', run.rules)
-          setData(next)
           setPostedCount(run.posted)
-        } else {
-          setData(loaded)
         }
+
+        // Standing tasks land on every day they were due, the same way. Done
+        // before the first paint so the task list never flashes empty.
+        const spawned = spawnTasks(next.taskTemplates, next.tasks)
+        if (spawned.templates.length > 0) {
+          next = {
+            ...next,
+            tasks: [...spawned.tasks, ...next.tasks],
+            taskTemplates: replaceRows(next.taskTemplates, spawned.templates),
+          }
+          await repo.putMany('taskTemplates', spawned.templates)
+          await repo.putMany('tasks', spawned.tasks)
+        }
+
+        setData(next)
         setReady(true)
       })
       .catch((e: unknown) => {
@@ -322,6 +356,111 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
         await commit({ ...data, contributions: [...data.contributions, row] }, (r) =>
           r.put('contributions', row),
+        )
+      },
+
+      async addTask(title) {
+        const task: Task = {
+          id: 'tk-' + uid(),
+          title,
+          day: todayISO(),
+          done: false,
+          createdAt: stamp(),
+        }
+        await commit({ ...data, tasks: [task, ...data.tasks] }, (r) => r.put('tasks', task))
+      },
+      async toggleTask(id) {
+        const task = data.tasks.find((t) => t.id === id)
+        if (!task) return
+        const next = { ...task, done: !task.done }
+        await commit({ ...data, tasks: replaceRows(data.tasks, [next]) }, (r) =>
+          r.put('tasks', next),
+        )
+      },
+      async renameTask(id, title) {
+        const task = data.tasks.find((t) => t.id === id)
+        if (!task) return
+        const next = { ...task, title }
+        await commit({ ...data, tasks: replaceRows(data.tasks, [next]) }, (r) =>
+          r.put('tasks', next),
+        )
+      },
+      async deleteTask(id) {
+        // A spawned task stays deleted: the template's cursor is already past it.
+        await commit({ ...data, tasks: data.tasks.filter((t) => t.id !== id) }, (r) =>
+          r.remove('tasks', id),
+        )
+      },
+      async saveTemplate(input) {
+        const today = todayISO()
+        const current = data.taskTemplates.find((t) => t.id === input.id)
+        // Edits count from today, never backwards: the cursor steps back to
+        // today at most, so a weekday added today shows up at once.
+        const row: TaskTemplate = current
+          ? {
+              ...current,
+              title: input.title,
+              weekdays: input.weekdays,
+              nextDay: current.nextDay > today ? today : current.nextDay,
+            }
+          : {
+              id: 'tt-' + uid(),
+              title: input.title,
+              weekdays: input.weekdays,
+              nextDay: today,
+              createdAt: stamp(),
+            }
+        const spawned = spawnTasks([row], data.tasks)
+        const saved = spawned.templates[0] ?? row
+        // Today's unfinished copy follows a new title; history keeps the old one.
+        const renamed = data.tasks
+          .filter((t) => t.templateId === row.id && t.day === today && !t.done && t.title !== row.title)
+          .map((t) => ({ ...t, title: row.title }))
+        await commit(
+          {
+            ...data,
+            taskTemplates: replaceRows(data.taskTemplates, [saved]),
+            tasks: [...spawned.tasks, ...replaceRows(data.tasks, renamed)],
+          },
+          async (r) => {
+            await r.put('taskTemplates', saved)
+            await r.putMany('tasks', [...renamed, ...spawned.tasks])
+          },
+        )
+      },
+      async deleteTemplate(id) {
+        // Past days stay in the statistics; only today's open copy goes.
+        const today = todayISO()
+        const dropped = new Set(
+          data.tasks
+            .filter((t) => t.templateId === id && t.day >= today && !t.done)
+            .map((t) => t.id),
+        )
+        await commit(
+          {
+            ...data,
+            taskTemplates: data.taskTemplates.filter((t) => t.id !== id),
+            tasks: data.tasks.filter((t) => !dropped.has(t.id)),
+          },
+          async (r) => {
+            for (const taskId of dropped) await r.remove('tasks', taskId)
+            await r.remove('taskTemplates', id)
+          },
+        )
+      },
+      async syncTasks() {
+        const spawned = spawnTasks(data.taskTemplates, data.tasks)
+        if (spawned.templates.length === 0) return
+        await commit(
+          {
+            ...data,
+            tasks: [...spawned.tasks, ...data.tasks],
+            taskTemplates: replaceRows(data.taskTemplates, spawned.templates),
+          },
+          async (r) => {
+            await r.putMany('taskTemplates', spawned.templates)
+            await r.putMany('tasks', spawned.tasks)
+          },
         )
       },
 

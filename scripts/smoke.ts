@@ -6,6 +6,10 @@ import {
   inRange, monthlySeries, netWorth, rangeFor, totals,
 } from '../src/lib/analytics.ts'
 import { money, signedMoney, plural, dayLabel, todayISO } from '../src/lib/format.ts'
+import {
+  heatLevel, heatmapWeeks, spawnTasks, spawnedId, statsByDay,
+  streak, weekCompletion, weekdaysLabel,
+} from '../src/lib/tasks.ts'
 
 const snap = demoSnapshot()
 assert.ok(snap.transactions.length > 30, 'demo has transactions')
@@ -84,6 +88,66 @@ const ending = catchUp(
 )
 assert.equal(ending.posted, 2, 'jun + jul, got ' + ending.posted)
 assert.equal(ending.rules[0].active, false, 'rule deactivates after its end date')
+
+// Tasks: standing templates spawn on their weekdays only, once per day.
+// 2026-09-21 is a Monday.
+const monday = new Date(2026, 8, 21, 12)
+const template = {
+  id: 'tt-a',
+  title: 'Отжаться 20 раз',
+  weekdays: [1, 3, 5],
+  nextDay: '2026-09-14',
+  createdAt: '2026-09-14T08:00:00Z',
+}
+const spawn = spawnTasks([template], [], monday)
+assert.deepEqual(
+  spawn.tasks.map((t) => t.day),
+  ['2026-09-14', '2026-09-16', '2026-09-18', '2026-09-21'],
+  'mon, wed, fri, mon',
+)
+assert.equal(spawn.tasks[0].id, spawnedId('tt-a', '2026-09-14'))
+assert.equal(spawn.templates[0].nextDay, '2026-09-22', 'cursor moves to tomorrow')
+assert.equal(spawnTasks(spawn.templates, spawn.tasks, monday).templates.length, 0, 'nothing twice a day')
+// Same cursor but tasks already there (second device): no duplicates.
+assert.equal(spawnTasks([template], spawn.tasks, monday).tasks.length, 0, 'deterministic ids dedupe')
+// A deleted day stays deleted once the cursor has passed it.
+const withoutToday = spawn.tasks.filter((t) => t.day !== '2026-09-21')
+assert.equal(spawnTasks(spawn.templates, withoutToday, monday).tasks.length, 0)
+// A template untouched for a year backfills at most 60 days.
+const stale = spawnTasks([{ ...template, weekdays: [0, 1, 2, 3, 4, 5, 6], nextDay: '2025-09-01' }], [], monday)
+assert.equal(stale.tasks.length, 60, 'backfill capped, got ' + stale.tasks.length)
+
+assert.equal(weekdaysLabel([0, 1, 2, 3, 4, 5, 6]), 'Каждый день')
+assert.equal(weekdaysLabel([1, 2, 3, 4, 5]), 'Будни')
+assert.equal(weekdaysLabel([6, 0]), 'Выходные')
+assert.equal(weekdaysLabel([5, 1, 3]), 'Пн, Ср, Пт')
+
+assert.equal(heatLevel(undefined), 0)
+assert.equal(heatLevel({ done: 0, total: 3 }), 0)
+assert.equal(heatLevel({ done: 1, total: 4 }), 1)
+assert.equal(heatLevel({ done: 1, total: 2 }), 2)
+assert.equal(heatLevel({ done: 2, total: 3 }), 3)
+assert.equal(heatLevel({ done: 3, total: 3 }), 4, 'only a finished day is the brightest')
+
+// Streak: an unfinished today and a day without tasks do not break the run.
+const task = (day: string, done: boolean) =>
+  ({ id: day + done + Math.random(), title: 'x', day, done, createdAt: '' })
+const history = statsByDay([
+  task('2026-09-21', false),
+  task('2026-09-20', true),
+  task('2026-09-18', true),
+  task('2026-09-18', true),
+  task('2026-09-17', false),
+])
+assert.equal(streak(history, monday), 2, 'sun + fri, sat has no tasks')
+assert.deepEqual(weekCompletion(history, monday), { done: 3, total: 5 })
+
+// The grid ends with the current week; days after today are empty.
+const grid = heatmapWeeks(monday, 20)
+assert.equal(grid.length, 20)
+assert.equal(grid[19][0], '2026-09-21', 'last column starts on this monday')
+assert.equal(grid[19][1], null, 'tomorrow is not drawn')
+assert.equal(grid[0][0], '2026-05-11')
 
 // Calendar days are local, not UTC: at UTC+5 an evening entry must not land
 // on yesterday. todayISO uses local formatting, so this holds.
