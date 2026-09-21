@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { MagnifyingGlass, X } from '@phosphor-icons/react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useApp } from '../data/store'
 import { Button, Empty, Screen, Segmented, Skeleton, cx, inputClass } from '../components/ui'
-import { TransactionRow, TransferRow } from '../components/TransactionRow'
+import { DebtRow, TransactionRow, TransferRow } from '../components/TransactionRow'
 import {
   groupByDay,
   inRange,
+  isDebt,
+  isDebtPayment,
   isTransfer,
   periodOptions,
   rangeFor,
@@ -23,7 +25,9 @@ export function Transactions({
   onAdd: () => void
   onEdit: (entry: Transaction | Transfer) => void
 }) {
-  const { data, ready, deleteTransaction, deleteTransfer } = useApp()
+  const { data, ready, deleteTransaction, deleteTransfer, deleteDebt, deleteDebtPayment } =
+    useApp()
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const [period, setPeriod] = useState<Period>('month')
   const [query, setQuery] = useState('')
@@ -66,9 +70,25 @@ export function Transactions({
     })
   }, [data.transfers, range, categoryFilter, query, accountIndex])
 
-  const groups = useMemo(() => groupByDay([...filtered, ...transfers]), [filtered, transfers])
+  // Debts and repayments, like transfers, have no category.
+  const debtIndex = useMemo(() => new Map(data.debts.map((d) => [d.id, d])), [data.debts])
+  const debtEntries = useMemo(() => {
+    if (categoryFilter) return []
+    const needle = query.trim().toLowerCase()
+    return [...data.debts, ...data.debtPayments].filter((entry) => {
+      if (!inRange(entry, range)) return false
+      if (!needle) return true
+      const debt = isDebtPayment(entry) ? debtIndex.get(entry.debtId) : entry
+      return ['долг', debt?.person, debt?.note].join(' ').toLowerCase().includes(needle)
+    })
+  }, [data.debts, data.debtPayments, debtIndex, range, categoryFilter, query])
+
+  const groups = useMemo(
+    () => groupByDay([...filtered, ...transfers, ...debtEntries]),
+    [filtered, transfers, debtEntries],
+  )
   const sums = useMemo(() => totals(filtered), [filtered])
-  const count = filtered.length + transfers.length
+  const count = filtered.length + transfers.length + debtEntries.length
   const activeCategory = categoryFilter ? categoryIndex.get(categoryFilter) : undefined
 
   if (!ready) {
@@ -159,7 +179,20 @@ export function Transactions({
                 </div>
                 <div className="flex flex-col gap-1.5">
                   {group.items.map((entry) =>
-                    isTransfer(entry) ? (
+                    isDebt(entry) || isDebtPayment(entry) ? (
+                      <DebtRow
+                        key={entry.id}
+                        entry={entry}
+                        debt={isDebt(entry) ? entry : debtIndex.get(entry.debtId)}
+                        accountName={accountIndex.get(entry.accountId)?.name}
+                        onOpen={() =>
+                          navigate(`/more/debts?open=${isDebt(entry) ? entry.id : entry.debtId}`)
+                        }
+                        onDelete={() =>
+                          void (isDebt(entry) ? deleteDebt(entry.id) : deleteDebtPayment(entry.id))
+                        }
+                      />
+                    ) : isTransfer(entry) ? (
                       <TransferRow
                         key={entry.id}
                         transfer={entry}

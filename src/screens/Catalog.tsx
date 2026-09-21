@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { format, subDays } from 'date-fns'
 import { Plus, Trash } from '@phosphor-icons/react'
 import { useApp } from '../data/store'
 import { Sheet } from '../components/Sheet'
@@ -15,7 +16,8 @@ import {
 } from '../components/ui'
 import { ICON_KEYS, SWATCHES, iconOf } from '../lib/icons'
 import { accountBalance } from '../lib/analytics'
-import { money, num, plural } from '../lib/format'
+import { accruedSoFar, projectDeposit } from '../lib/interest'
+import { dayLabel, money, num, plural } from '../lib/format'
 import type { Account, Category, TxKind } from '../lib/types'
 
 function DragHint() {
@@ -273,11 +275,16 @@ export function Accounts() {
                   style={{ background: account.color }}
                   aria-hidden="true"
                 />
-                <span className="min-w-0 flex-1 truncate text-[15px] font-medium">
-                  {account.name}
+                <span className="flex min-w-0 flex-1 items-center gap-2">
+                  <span className="truncate text-[15px] font-medium">{account.name}</span>
+                  {account.interestRate ? (
+                    <span className="tnum shrink-0 rounded-full bg-pos-soft px-1.5 py-0.5 text-[11px] font-semibold text-pos">
+                      {rateLabel(account.interestRate)}%
+                    </span>
+                  ) : null}
                 </span>
                 <span className="tnum shrink-0 text-[15px] font-semibold">
-                  {money(accountBalance(account, data.transactions, data.transfers))}
+                  {money(accountBalance(account, data))}
                 </span>
               </>
             )}
@@ -313,6 +320,16 @@ export function Accounts() {
   )
 }
 
+/** 14.5 -> "14,5" */
+function rateLabel(rate: number): string {
+  return String(rate).replace('.', ',')
+}
+
+function parseRate(text: string): number {
+  const value = Number(text.replace(',', '.').replace(/[^\d.]/g, ''))
+  return Number.isFinite(value) && value > 0 && value <= 100 ? value : 0
+}
+
 const ACCOUNT_TYPES: Array<{ value: Account['type']; label: string }> = [
   { value: 'card', label: 'Карта' },
   { value: 'cash', label: 'Наличные' },
@@ -336,6 +353,8 @@ function AccountSheet({
   const [type, setType] = useState<Account['type']>('card')
   const [initial, setInitial] = useState('')
   const [color, setColor] = useState(SWATCHES[4])
+  const [rate, setRate] = useState('')
+  const [creditDay, setCreditDay] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -343,9 +362,14 @@ function AccountSheet({
     setType(account?.type ?? 'card')
     setInitial(account ? String(account.initialBalance) : '')
     setColor(account?.color ?? SWATCHES[4])
+    setRate(account?.interestRate ? rateLabel(account.interestRate) : '')
+    setCreditDay(String(account?.interestDay ?? new Date().getDate()))
   }, [open, account])
 
   const start = Number(initial.replace(/[^\d-]/g, '') || '0')
+  const savings = type === 'savings'
+  const annual = savings ? parseRate(rate) : 0
+  const day = Math.min(31, Math.max(1, Math.round(Number(creditDay) || 1)))
 
   return (
     <Sheet open={open} onClose={onClose} title={account ? 'Изменить счёт' : 'Новый счёт'}>
@@ -373,6 +397,41 @@ function AccountSheet({
           />
         </Field>
 
+        {savings && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Ставка, % годовых">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                  placeholder="Например, 14"
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Число начисления">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={31}
+                  value={creditDay}
+                  onChange={(e) => setCreditDay(e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+            <p className="-mt-1 text-[12.5px] leading-relaxed text-faint">
+              Проценты считаются по остатку на каждый день и раз в месяц сами
+              добавляются к счёту. Вручную вносить не нужно.
+            </p>
+            {annual > 0 && (
+              <DepositOutlook account={account} rate={annual} fallbackBalance={start} />
+            )}
+          </>
+        )}
+
         <Field label="Цвет">
           <div className="flex flex-wrap gap-2">
             {SWATCHES.map((swatch) => (
@@ -399,6 +458,8 @@ function AccountSheet({
               type,
               initialBalance: start,
               color,
+              interestRate: annual || undefined,
+              interestDay: annual ? day : undefined,
             })
           }
           disabled={!name.trim()}
@@ -414,5 +475,82 @@ function AccountSheet({
         )}
       </div>
     </Sheet>
+  )
+}
+
+/**
+ * What a deposit is earning: interest gathered so far this month, the monthly
+ * pace, and where regular top-ups take the balance over a year. The rate is
+ * the one being typed, so the numbers move before anything is saved.
+ */
+function DepositOutlook({
+  account,
+  rate,
+  fallbackBalance,
+}: {
+  account: Account | null
+  rate: number
+  fallbackBalance: number
+}) {
+  const { data } = useApp()
+  const balance = account ? accountBalance(account, data) : fallbackBalance
+
+  // Default top-up: what actually arrived on this account over the last month.
+  const recentTopUp = useMemo(() => {
+    if (!account) return 0
+    const since = format(subDays(new Date(), 30), 'yyyy-MM-dd')
+    return data.transfers
+      .filter((t) => t.toAccountId === account.id && t.occurredAt >= since)
+      .reduce((sum, t) => sum + t.amount, 0)
+  }, [account, data.transfers])
+  const [topUp, setTopUp] = useState(() => (recentTopUp ? String(recentTopUp) : ''))
+  const monthly = Number(topUp.replace(/\D/g, '') || '0')
+
+  const running = account?.interestRate ? accruedSoFar(account, data) : null
+  const outlook = projectDeposit(balance, rate, monthly, 12)
+  const half = outlook[5]
+  const year = outlook[11]
+
+  return (
+    <Card className="flex flex-col gap-3 bg-surface-2">
+      <p className="text-[13px] font-semibold text-dim">Депозит</p>
+      {running && (
+        <p className="text-[14px]">
+          Набежало <span className="tnum font-semibold text-pos">≈ {money(running.amount)}</span>,
+          придут {dayLabel(running.creditOn).toLowerCase()}
+        </p>
+      )}
+      <p className="text-[14px]">
+        При текущем остатке{' '}
+        <span className="tnum font-semibold">≈ {money((Math.max(0, balance) * rate) / 100 / 12)}</span> в
+        месяц
+      </p>
+
+      <Field label="Пополнять в месяц">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={monthly ? num(monthly) : ''}
+          onChange={(e) => setTopUp(e.target.value)}
+          placeholder="0"
+          className={cx(inputClass, 'bg-surface')}
+        />
+      </Field>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-[var(--r-md)] bg-surface px-3 py-2.5">
+          <p className="text-[12px] text-dim">Через 6 месяцев</p>
+          <p className="tnum mt-0.5 text-[16px] font-semibold">≈ {money(half.balance)}</p>
+        </div>
+        <div className="rounded-[var(--r-md)] bg-surface px-3 py-2.5">
+          <p className="text-[12px] text-dim">Через год</p>
+          <p className="tnum mt-0.5 text-[16px] font-semibold">≈ {money(year.balance)}</p>
+        </div>
+      </div>
+      <p className="text-[12.5px] text-faint">
+        Из них проценты за год ≈ {money(year.interest)}
+        {monthly > 0 ? `, пополнения — ${money(monthly * 12)}` : ''}.
+      </p>
+    </Card>
   )
 }

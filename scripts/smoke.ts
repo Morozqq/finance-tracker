@@ -10,6 +10,9 @@ import {
   heatLevel, heatmapWeeks, spawnTasks, spawnedId, statsByDay,
   streak, weekCompletion, weekdaysLabel,
 } from '../src/lib/tasks.ts'
+import { accrueInterest, nextCreditDate, projectDeposit } from '../src/lib/interest.ts'
+import { debtRemaining, debtTotals, knownPeople } from '../src/lib/debts.ts'
+import type { Account, Debt, DebtPayment } from '../src/lib/types.ts'
 
 const snap = demoSnapshot()
 assert.ok(snap.transactions.length > 30, 'demo has transactions')
@@ -47,8 +50,8 @@ assert.ok(Math.abs(shareSum - 1) < 1e-9 || slices.length === 0, 'shares add up t
 
 // Balances.
 assert.equal(
-  netWorth(snap.accounts, snap.transactions, snap.transfers),
-  snap.accounts.reduce((s, a) => s + accountBalance(a, snap.transactions, snap.transfers), 0),
+  netWorth(snap.accounts, snap),
+  snap.accounts.reduce((s, a) => s + accountBalance(a, snap), 0),
 )
 
 // Transfers move money between accounts without changing the total.
@@ -57,19 +60,10 @@ const move = [{
   id: 'tr-x', fromAccountId: card.id, toAccountId: cash.id,
   amount: 50000, occurredAt: todayISO(), createdAt: '',
 }]
-assert.equal(
-  accountBalance(card, snap.transactions, [...snap.transfers, ...move]),
-  accountBalance(card, snap.transactions, snap.transfers) - 50000,
-)
-assert.equal(
-  accountBalance(cash, snap.transactions, [...snap.transfers, ...move]),
-  accountBalance(cash, snap.transactions, snap.transfers) + 50000,
-)
-assert.equal(
-  netWorth(snap.accounts, snap.transactions, [...snap.transfers, ...move]),
-  netWorth(snap.accounts, snap.transactions, snap.transfers),
-  'a transfer leaves the total alone',
-)
+const moved = { ...snap, transfers: [...snap.transfers, ...move] }
+assert.equal(accountBalance(card, moved), accountBalance(card, snap) - 50000)
+assert.equal(accountBalance(cash, moved), accountBalance(cash, snap) + 50000)
+assert.equal(netWorth(snap.accounts, moved), netWorth(snap.accounts, snap), 'a transfer leaves the total alone')
 // ...and never count as income or spending in the day sums.
 const mixed = groupByDay([...snap.transactions.filter((t) => t.occurredAt === todayISO()), ...move])
 const todayGroup = mixed.find((g) => g.date === todayISO())!
@@ -81,6 +75,83 @@ assert.equal(
     .reduce((s, t) => s + t.amount, 0),
   'day sums ignore transfers',
 )
+
+// Debts: lending takes money off the account, a repayment brings it back,
+// and neither is spending or income.
+const lend: Debt = {
+  id: 'd-1', direction: 'lent', person: 'Асет', amount: 20000,
+  accountId: card.id, occurredAt: todayISO(), createdAt: '1',
+}
+const owe: Debt = { ...lend, id: 'd-2', direction: 'borrowed', person: 'асет', amount: 7000, createdAt: '2' }
+const back: DebtPayment = {
+  id: 'dp-1', debtId: 'd-1', amount: 5000, accountId: card.id, occurredAt: todayISO(), createdAt: '3',
+}
+const cardNow = accountBalance(card, snap)
+assert.equal(accountBalance(card, { ...snap, debts: [lend] }), cardNow - 20000, 'lending leaves the account')
+assert.equal(accountBalance(card, { ...snap, debts: [lend], debtPayments: [back] }), cardNow - 15000, 'repayment returns')
+assert.equal(accountBalance(card, { ...snap, debts: [owe] }), cardNow + 7000, 'borrowing lands on the account')
+assert.equal(
+  accountBalance(card, { ...snap, debts: [owe], debtPayments: [{ ...back, debtId: 'd-2' }] }),
+  cardNow + 2000,
+  'paying back a loan leaves the account',
+)
+assert.equal(debtRemaining(lend, [back]), 15000)
+assert.deepEqual(debtTotals([lend, owe], [back]), { owedToMe: 15000, iOwe: 7000 })
+assert.deepEqual(knownPeople([lend, owe]), ['асет'], 'names dedupe regardless of case')
+const debtDay = groupByDay([lend, back])[0]
+assert.equal(debtDay.expense + debtDay.income, 0, 'debts do not count as spending or income')
+
+// Interest: daily on the actual balance, paid monthly, compounding.
+assert.equal(nextCreditDate('2026-09-21', 21), '2026-10-21')
+assert.equal(nextCreditDate('2026-09-10', 21), '2026-09-21')
+assert.equal(nextCreditDate('2026-08-31', 31), '2026-09-30', 'the 31st falls back to a short month end')
+assert.equal(nextCreditDate('2026-01-31', 31), '2026-02-28')
+
+const deposit: Account = {
+  id: 'a-dep', name: 'Депозит', type: 'savings', initialBalance: 1_000_000, color: '#2FAF8C',
+  sort: 0, interestRate: 14, interestDay: 21, interestFrom: '2026-09-21',
+}
+const blank = { transactions: [], transfers: [], debts: [], debtPayments: [] }
+const percentCategory = snap.categories.find((c) => c.name === 'Проценты')!
+const oct21 = new Date(2026, 9, 21, 12)
+
+const first = accrueInterest([deposit], blank, snap.categories, oct21)
+assert.equal(first.transactions.length, 1)
+assert.equal(first.transactions[0].amount, 11507, '1 000 000 at 14% for 30 days, got ' + first.transactions[0].amount)
+assert.equal(first.transactions[0].occurredAt, '2026-10-21')
+assert.equal(first.transactions[0].categoryId, percentCategory.id)
+assert.equal(first.accounts[0].interestFrom, '2026-10-21', 'cursor moves to the credit date')
+
+// A top-up on 6 October earns for its 15 remaining days.
+const topped = accrueInterest([deposit], {
+  ...blank,
+  transfers: [{ id: 'tr-top', fromAccountId: 'a-x', toAccountId: 'a-dep', amount: 100000, occurredAt: '2026-10-06', createdAt: '' }],
+}, snap.categories, oct21)
+assert.equal(
+  topped.transactions[0].amount,
+  Math.round((1_000_000 * 0.14 * 30) / 365 + (100_000 * 0.14 * 15) / 365),
+  'a top-up counts from its own day',
+)
+
+// The second month earns on the first month's interest as well.
+const twoMonths = accrueInterest([deposit], blank, snap.categories, new Date(2026, 10, 21, 12))
+assert.equal(twoMonths.transactions.length, 2)
+assert.equal(twoMonths.transactions[1].amount, Math.round((1_011_507 * 0.14 * 31) / 365), 'capitalised')
+
+// Paid already, say from another device: the cursor moves, nothing is paid twice.
+const repeat = accrueInterest([deposit], { ...blank, transactions: first.transactions }, snap.categories, oct21)
+assert.equal(repeat.transactions.length, 0)
+assert.equal(repeat.accounts[0].interestFrom, '2026-10-21')
+// A cursor years back catches up at most 36 months per run.
+assert.equal(accrueInterest([{ ...deposit, interestFrom: '2020-01-21' }], blank, snap.categories, oct21).transactions.length, 36)
+// No rate, no interest.
+assert.equal(accrueInterest([{ ...deposit, interestRate: undefined }], blank, snap.categories, oct21).transactions.length, 0)
+
+// Outlook: 100 000 a month at 14% for a year.
+const outlook = projectDeposit(0, 14, 100_000, 12)
+assert.equal(outlook.length, 12)
+assert.ok(outlook[11].balance > 1_290_000 && outlook[11].balance < 1_300_000, 'a year out: ' + outlook[11].balance)
+assert.ok(Math.abs(outlook[11].balance - outlook[11].interest - 1_200_000) <= 1, 'balance = top-ups + interest')
 
 // Grouping keeps every row and orders days newest first.
 const groups = groupByDay(scoped)

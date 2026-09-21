@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
-import { ArrowsLeftRight, Trash } from '@phosphor-icons/react'
+import { ArrowsLeftRight, Handshake, Trash } from '@phosphor-icons/react'
 import { Badge } from './ui'
 import { money, signedMoney } from '../lib/format'
-import type { Category, Transaction, Transfer } from '../lib/types'
+import type { Category, Debt, DebtPayment, Transaction, Transfer } from '../lib/types'
 
 /**
  * Swiping left reveals a delete button rather than deleting outright: on a
@@ -122,6 +122,53 @@ export function TransferRow({
       </span>
       <span className="tnum shrink-0 text-[15px] font-semibold text-dim">
         {money(transfer.amount)}
+      </span>
+    </SwipeRow>
+  )
+}
+
+/**
+ * A debt or a repayment. Money moves between the account and a person, so like
+ * a transfer it carries no colour; the sign says which way it went.
+ */
+export function DebtRow({
+  entry,
+  debt,
+  accountName,
+  onOpen,
+  onDelete,
+}: {
+  entry: Debt | DebtPayment
+  /** The debt itself, or the one a repayment belongs to. */
+  debt?: Debt
+  accountName?: string
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  const repayment = 'debtId' in entry
+  const lent = debt?.direction === 'lent'
+  // Money leaves the account when lending, or when paying back a loan.
+  const outgoing = repayment ? !lent : lent
+  const title = repayment ? 'Возврат долга' : lent ? 'Дал в долг' : 'Взял в долг'
+
+  return (
+    <SwipeRow onEdit={onOpen} onDelete={onDelete}>
+      <span
+        className="grid size-10 shrink-0 place-items-center rounded-[calc(var(--r-md)-4px)] bg-surface-2 text-dim"
+        aria-hidden="true"
+      >
+        <Handshake size={20} weight="bold" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-medium">{title}</span>
+        <span className="block truncate text-[12.5px] text-faint">
+          {debt?.person ?? 'Долг удалён'}
+          {accountName ? ` · ${accountName}` : ''}
+        </span>
+      </span>
+      <span className="tnum shrink-0 text-[15px] font-semibold text-dim">
+        {outgoing ? '−' : '+'}
+        {money(entry.amount)}
       </span>
     </SwipeRow>
   )

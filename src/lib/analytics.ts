@@ -9,7 +9,17 @@ import {
   subMonths,
 } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import type { Account, Category, GoalContribution, Transaction, Transfer, TxKind } from './types'
+import type {
+  Account,
+  Category,
+  Debt,
+  DebtPayment,
+  GoalContribution,
+  Snapshot,
+  Transaction,
+  Transfer,
+  TxKind,
+} from './types'
 
 export type Period = 'month' | 'prev' | 'year' | 'all'
 
@@ -166,34 +176,70 @@ export function monthlySeries(transactions: Transaction[], months: number, now =
   return out
 }
 
-export function accountBalance(
-  account: Account,
-  transactions: Transaction[],
-  transfers: Transfer[],
-): number {
-  let balance = account.initialBalance
-  for (const t of transactions) {
-    if (t.accountId !== account.id) continue
-    balance += t.kind === 'income' ? t.amount : -t.amount
-  }
-  for (const t of transfers) {
-    if (t.fromAccountId === account.id) balance -= t.amount
-    if (t.toAccountId === account.id) balance += t.amount
-  }
-  return balance
+/** Everything that moves money on an account. */
+export type Ledger = Pick<Snapshot, 'transactions' | 'transfers' | 'debts' | 'debtPayments'>
+
+export interface Move {
+  day: string
+  amount: number
 }
 
-/** Transfers cancel out here: what leaves one account lands in another. */
-export function netWorth(
-  accounts: Account[],
-  transactions: Transaction[],
-  transfers: Transfer[],
-): number {
-  return accounts.reduce((sum, a) => sum + accountBalance(a, transactions, transfers), 0)
+/**
+ * Every change to one account's balance, signed. The single place that knows
+ * how each kind of record touches an account, so balances, daily balances and
+ * interest can never disagree with each other.
+ */
+export function accountMoves(accountId: string, ledger: Ledger): Move[] {
+  const moves: Move[] = []
+  for (const t of ledger.transactions) {
+    if (t.accountId === accountId) {
+      moves.push({ day: t.occurredAt, amount: t.kind === 'income' ? t.amount : -t.amount })
+    }
+  }
+  for (const t of ledger.transfers) {
+    if (t.fromAccountId === accountId) moves.push({ day: t.occurredAt, amount: -t.amount })
+    if (t.toAccountId === accountId) moves.push({ day: t.occurredAt, amount: t.amount })
+  }
+  const lent = new Map<string, boolean>()
+  for (const d of ledger.debts) {
+    lent.set(d.id, d.direction === 'lent')
+    if (d.accountId === accountId) {
+      moves.push({ day: d.occurredAt, amount: d.direction === 'lent' ? -d.amount : d.amount })
+    }
+  }
+  for (const p of ledger.debtPayments) {
+    if (p.accountId !== accountId || !lent.has(p.debtId)) continue
+    moves.push({ day: p.occurredAt, amount: lent.get(p.debtId) ? p.amount : -p.amount })
+  }
+  return moves
 }
 
-export function isTransfer(entry: Transaction | Transfer): entry is Transfer {
+export function accountBalance(account: Account, ledger: Ledger): number {
+  return accountMoves(account.id, ledger).reduce((sum, m) => sum + m.amount, account.initialBalance)
+}
+
+/** Transfers cancel out here; money lent or owed shows up on its own card. */
+export function netWorth(accounts: Account[], ledger: Ledger): number {
+  return accounts.reduce((sum, a) => sum + accountBalance(a, ledger), 0)
+}
+
+/** Anything the operations list shows. */
+export type Entry = Transaction | Transfer | Debt | DebtPayment
+
+export function isTransaction(entry: Entry): entry is Transaction {
+  return 'categoryId' in entry
+}
+
+export function isTransfer(entry: Entry): entry is Transfer {
   return 'fromAccountId' in entry
+}
+
+export function isDebt(entry: Entry): entry is Debt {
+  return 'person' in entry
+}
+
+export function isDebtPayment(entry: Entry): entry is DebtPayment {
+  return 'debtId' in entry
 }
 
 export function goalSaved(goalId: string, contributions: GoalContribution[]): number {
@@ -201,8 +247,8 @@ export function goalSaved(goalId: string, contributions: GoalContribution[]): nu
 }
 
 /** Groups entries into day sections, newest first. Day sums count income and
- *  spending only, so transfers show up in the list without moving them. */
-export function groupByDay<T extends Transaction | Transfer>(transactions: T[]) {
+ *  spending only, so transfers and debts show up without moving them. */
+export function groupByDay<T extends Entry>(transactions: T[]) {
   const map = new Map<string, T[]>()
   for (const t of transactions) {
     const list = map.get(t.occurredAt)
@@ -214,7 +260,7 @@ export function groupByDay<T extends Transaction | Transfer>(transactions: T[]) 
     .map(([date, items]) => ({
       date,
       items: items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-      expense: items.reduce((s, t) => s + (!isTransfer(t) && t.kind === 'expense' ? t.amount : 0), 0),
-      income: items.reduce((s, t) => s + (!isTransfer(t) && t.kind === 'income' ? t.amount : 0), 0),
+      expense: items.reduce((s, t) => s + (isTransaction(t) && t.kind === 'expense' ? t.amount : 0), 0),
+      income: items.reduce((s, t) => s + (isTransaction(t) && t.kind === 'income' ? t.amount : 0), 0),
     }))
 }

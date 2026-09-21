@@ -25,6 +25,12 @@ export interface Account {
   /** Position set by dragging in Счета; the first account is the default one. */
   sort: number
   archived?: boolean
+  /** Annual rate in percent. Set only on deposits that earn interest. */
+  interestRate?: number
+  /** Day of the month interest is credited on, 1–31; short months use their last day. */
+  interestDay?: number
+  /** ISO calendar day interest is counted from; every day before it is already paid. */
+  interestFrom?: string
 }
 
 export interface Transaction {
@@ -50,6 +56,34 @@ export interface Transfer {
   /** ISO calendar day, YYYY-MM-DD. */
   occurredAt: string
   note?: string
+  createdAt: string
+}
+
+/** Money lent to someone or borrowed from them. Like a transfer, it moves an
+ *  account balance without being income or spending. */
+export interface Debt {
+  id: string
+  /** lent: I gave the money; borrowed: I took it. */
+  direction: 'lent' | 'borrowed'
+  person: string
+  amount: Tenge
+  /** Account the money left (lent) or arrived at (borrowed). */
+  accountId: string
+  /** ISO calendar day, YYYY-MM-DD. */
+  occurredAt: string
+  dueAt?: string
+  note?: string
+  createdAt: string
+}
+
+/** A repayment, whole or partial, against one debt. */
+export interface DebtPayment {
+  id: string
+  debtId: string
+  amount: Tenge
+  /** Account the money arrived at (lent) or left from (borrowed). */
+  accountId: string
+  occurredAt: string
   createdAt: string
 }
 
@@ -123,6 +157,8 @@ export interface Snapshot {
   accounts: Account[]
   transactions: Transaction[]
   transfers: Transfer[]
+  debts: Debt[]
+  debtPayments: DebtPayment[]
   recurring: RecurringRule[]
   goals: Goal[]
   contributions: GoalContribution[]

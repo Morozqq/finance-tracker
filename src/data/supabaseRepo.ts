@@ -2,6 +2,8 @@ import type { Repo, RowOf, TableKey } from './repo'
 import type {
   Account,
   Category,
+  Debt,
+  DebtPayment,
   Goal,
   GoalContribution,
   RecurringRule,
@@ -21,6 +23,8 @@ const TABLE: Record<TableKey, string> = {
   accounts: 'accounts',
   transactions: 'transactions',
   transfers: 'transfers',
+  debts: 'debts',
+  debtPayments: 'debt_payments',
   recurring: 'recurring_rules',
   goals: 'goals',
   contributions: 'goal_contributions',
@@ -50,6 +54,9 @@ const toDb = {
     color: a.color,
     sort_order: a.sort,
     archived: a.archived ?? false,
+    interest_rate: a.interestRate ?? null,
+    interest_day: a.interestDay ?? null,
+    interest_from: a.interestFrom ?? null,
   }),
   transactions: (t: Transaction, user_id: string) => ({
     id: t.id,
@@ -72,6 +79,27 @@ const toDb = {
     occurred_at: t.occurredAt,
     note: t.note ?? null,
     created_at: t.createdAt,
+  }),
+  debts: (d: Debt, user_id: string) => ({
+    id: d.id,
+    user_id,
+    direction: d.direction,
+    person: d.person,
+    amount: d.amount,
+    account_id: d.accountId,
+    occurred_at: d.occurredAt,
+    due_at: d.dueAt ?? null,
+    note: d.note ?? null,
+    created_at: d.createdAt,
+  }),
+  debtPayments: (p: DebtPayment, user_id: string) => ({
+    id: p.id,
+    user_id,
+    debt_id: p.debtId,
+    amount: p.amount,
+    account_id: p.accountId,
+    occurred_at: p.occurredAt,
+    created_at: p.createdAt,
   }),
   recurring: (r: RecurringRule, user_id: string) => ({
     id: r.id,
@@ -143,6 +171,9 @@ const fromDb = {
     color: r.color as string,
     sort: Number(r.sort_order ?? 0),
     archived: (r.archived as boolean) ?? false,
+    interestRate: r.interest_rate == null ? undefined : Number(r.interest_rate),
+    interestDay: r.interest_day == null ? undefined : Number(r.interest_day),
+    interestFrom: (r.interest_from as string) ?? undefined,
   }),
   transactions: (r: Row): Transaction => ({
     id: r.id as string,
@@ -162,6 +193,25 @@ const fromDb = {
     amount: Number(r.amount ?? 0),
     occurredAt: r.occurred_at as string,
     note: (r.note as string) ?? undefined,
+    createdAt: r.created_at as string,
+  }),
+  debts: (r: Row): Debt => ({
+    id: r.id as string,
+    direction: r.direction as Debt['direction'],
+    person: r.person as string,
+    amount: Number(r.amount ?? 0),
+    accountId: r.account_id as string,
+    occurredAt: r.occurred_at as string,
+    dueAt: (r.due_at as string) ?? undefined,
+    note: (r.note as string) ?? undefined,
+    createdAt: r.created_at as string,
+  }),
+  debtPayments: (r: Row): DebtPayment => ({
+    id: r.id as string,
+    debtId: r.debt_id as string,
+    amount: Number(r.amount ?? 0),
+    accountId: r.account_id as string,
+    occurredAt: r.occurred_at as string,
     createdAt: r.created_at as string,
   }),
   recurring: (r: Row): RecurringRule => ({
@@ -212,8 +262,9 @@ const fromDb = {
 }
 
 /**
- * Task and transfer tables came after the first schema. Until schema.sql is
- * re-run they do not exist, and the rest of the app must keep working.
+ * Task, transfer and debt tables came after the first schema. Until
+ * schema.sql is re-run they do not exist, and the rest of the app must keep
+ * working.
  */
 function optionalRows(result: { data: Row[] | null; error: { code?: string; message: string } | null }): Row[] {
   if (!result.error) return result.data ?? []
@@ -231,8 +282,10 @@ export class SupabaseRepo implements Repo {
 
   async load(): Promise<Snapshot> {
     const db = requireClient()
-    const [cats, accs, txs, recs, goals, contribs, settings, tasks, templates, transfers] =
-      await Promise.all([
+    const [
+      cats, accs, txs, recs, goals, contribs, settings,
+      tasks, templates, transfers, debts, payments,
+    ] = await Promise.all([
         db.from('categories').select('*').order('sort_order'),
         db.from('accounts').select('*').order('name'),
         db.from('transactions').select('*').order('occurred_at', { ascending: false }),
@@ -244,6 +297,8 @@ export class SupabaseRepo implements Repo {
         db.from('tasks').select('*').order('day', { ascending: false }),
         db.from('task_templates').select('*').order('created_at'),
         db.from('transfers').select('*').order('occurred_at', { ascending: false }),
+        db.from('debts').select('*').order('occurred_at', { ascending: false }),
+        db.from('debt_payments').select('*').order('occurred_at'),
       ])
 
     const failure = [cats, accs, txs, recs, goals, contribs].find((r) => r.error)
@@ -256,6 +311,8 @@ export class SupabaseRepo implements Repo {
       accounts: (accs.data ?? []).map(fromDb.accounts).sort((a, b) => a.sort - b.sort),
       transactions: (txs.data ?? []).map(fromDb.transactions),
       transfers: optionalRows(transfers).map(fromDb.transfers),
+      debts: optionalRows(debts).map(fromDb.debts),
+      debtPayments: optionalRows(payments).map(fromDb.debtPayments),
       recurring: (recs.data ?? []).map(fromDb.recurring),
       goals: (goals.data ?? []).map(fromDb.goals),
       contributions: (contribs.data ?? []).map(fromDb.contributions),
@@ -317,6 +374,8 @@ export class SupabaseRepo implements Repo {
       this.putMany('goals', snapshot.goals),
     ])
     await this.putMany('contributions', snapshot.contributions)
+    await this.putMany('debts', snapshot.debts)
+    await this.putMany('debtPayments', snapshot.debtPayments)
     await this.putMany('taskTemplates', snapshot.taskTemplates)
     await this.putMany('tasks', snapshot.tasks)
     await this.saveSettings(snapshot.settings)
@@ -324,7 +383,11 @@ export class SupabaseRepo implements Repo {
 
   async clearRecords(): Promise<void> {
     const db = requireClient()
-    for (const table of ['goal_contributions', 'goals', 'transactions', 'transfers', 'recurring_rules']) {
+    const tables = [
+      'goal_contributions', 'goals', 'transactions', 'transfers',
+      'debt_payments', 'debts', 'recurring_rules',
+    ]
+    for (const table of tables) {
       const { error } = await db.from(table).delete().eq('user_id', this.userId)
       if (error) throw new Error(error.message)
     }

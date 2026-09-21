@@ -4,6 +4,7 @@ import {
   CloudCheck,
   DeviceMobile,
   DownloadSimple,
+  Handshake,
   SignOut,
   SquaresFour,
   Wallet,
@@ -11,10 +12,13 @@ import {
 import { Link } from 'react-router-dom'
 import { useApp } from '../data/store'
 import { Button, Card, Screen, Segmented, SectionTitle } from '../components/ui'
+import { debtRemaining } from '../lib/debts'
 import { plural } from '../lib/format'
 
 export function More() {
   const { data, mode, email, setTheme, signOut, clearDemo } = useApp()
+
+  const openDebts = data.debts.filter((d) => debtRemaining(d, data.debtPayments) > 0).length
 
   const links = [
     {
@@ -22,6 +26,14 @@ export function More() {
       Icon: ArrowsClockwise,
       label: 'Регулярные платежи',
       meta: `${data.recurring.length} ${plural(data.recurring.length, 'правило', 'правила', 'правил')}`,
+    },
+    {
+      to: '/more/debts',
+      Icon: Handshake,
+      label: 'Долги',
+      meta: openDebts
+        ? `${openDebts} ${plural(openDebts, 'открытый', 'открытых', 'открытых')}`
+        : 'нет',
     },
     {
       to: '/more/categories',

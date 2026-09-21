@@ -1,6 +1,8 @@
 import type {
   Account,
   Category,
+  Debt,
+  DebtPayment,
   Goal,
   GoalContribution,
   RecurringRule,
@@ -18,6 +20,8 @@ export type TableKey =
   | 'accounts'
   | 'transactions'
   | 'transfers'
+  | 'debts'
+  | 'debtPayments'
   | 'recurring'
   | 'goals'
   | 'contributions'
@@ -32,15 +36,19 @@ export type RowOf<K extends TableKey> = K extends 'categories'
       ? Transaction
       : K extends 'transfers'
         ? Transfer
-        : K extends 'recurring'
-          ? RecurringRule
-          : K extends 'goals'
-            ? Goal
-            : K extends 'tasks'
-              ? Task
-              : K extends 'taskTemplates'
-                ? TaskTemplate
-                : GoalContribution
+        : K extends 'debts'
+          ? Debt
+          : K extends 'debtPayments'
+            ? DebtPayment
+            : K extends 'recurring'
+              ? RecurringRule
+              : K extends 'goals'
+                ? Goal
+                : K extends 'tasks'
+                  ? Task
+                  : K extends 'taskTemplates'
+                    ? TaskTemplate
+                    : GoalContribution
 
 /**
  * One interface, two implementations. The screens never learn which one is

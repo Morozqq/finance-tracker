@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowDown, ArrowUp, CalendarBlank, X } from '@phosphor-icons/react'
+import { ArrowDown, ArrowUp, CalendarBlank, CaretRight, Handshake, X } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../data/store'
 import { Badge, Button, Card, Screen, Segmented, SectionTitle, Skeleton, cx } from '../components/ui'
@@ -19,6 +19,7 @@ import {
   type Period,
 } from '../lib/analytics'
 import { compactMoney, dayLabel, money, monthLabel, num, plural, shortDate } from '../lib/format'
+import { debtTotals } from '../lib/debts'
 import { parseISO, differenceInCalendarDays, getDate } from 'date-fns'
 
 export function Dashboard({
@@ -53,9 +54,13 @@ export function Dashboard({
     () => byCategory(scoped, data.categories, 'expense'),
     [scoped, data.categories],
   )
+  const debts = useMemo(
+    () => debtTotals(data.debts, data.debtPayments),
+    [data.debts, data.debtPayments],
+  )
   const worth = useMemo(
-    () => netWorth(data.accounts, data.transactions, data.transfers),
-    [data.accounts, data.transactions, data.transfers],
+    () => netWorth(data.accounts, data),
+    [data],
   )
 
   const byMonth = period === 'year' || period === 'all'
@@ -201,7 +206,7 @@ export function Dashboard({
                   {account.name}
                 </span>
                 <span className="tnum mt-0.5 block text-[15px] font-semibold">
-                  {money(accountBalance(account, data.transactions, data.transfers))}
+                  {money(accountBalance(account, data))}
                 </span>
               </div>
             ))}
@@ -376,6 +381,29 @@ export function Dashboard({
               </section>
             )}
           </>
+        )}
+
+        {(debts.owedToMe > 0 || debts.iOwe > 0) && (
+          <Link
+            to="/more/debts"
+            className="flex items-center gap-3 rounded-[var(--r-lg)] bg-surface px-4 py-3"
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-[var(--r-sm)] bg-surface-2 text-dim">
+              <Handshake size={19} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-medium">Долги</span>
+              <span className="tnum block truncate text-[13px] text-dim">
+                {[
+                  debts.owedToMe > 0 && `вам должны ${money(debts.owedToMe)}`,
+                  debts.iOwe > 0 && `вы должны ${money(debts.iOwe)}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </span>
+            <CaretRight size={15} className="shrink-0 text-faint" />
+          </Link>
         )}
 
         {upcoming.length > 0 && (

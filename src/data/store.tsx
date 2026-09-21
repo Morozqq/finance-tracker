@@ -12,6 +12,8 @@ import type { Session } from '@supabase/supabase-js'
 import type {
   Account,
   Category,
+  Debt,
+  DebtPayment,
   Goal,
   GoalContribution,
   RecurringRule,
@@ -29,6 +31,7 @@ import { hasCloud, supabase } from './supabase'
 import { emptySnapshot } from '../lib/seed'
 import { catchUp } from '../lib/recurring'
 import { spawnTasks } from '../lib/tasks'
+import { accrueInterest } from '../lib/interest'
 import { todayISO, uid } from '../lib/format'
 
 /** Swaps rows that share an id and appends the rest. */
@@ -56,6 +59,11 @@ interface AppValue {
   addTransfer: (input: Omit<Transfer, 'id' | 'createdAt'>) => Promise<void>
   updateTransfer: (transfer: Transfer) => Promise<void>
   deleteTransfer: (id: string) => Promise<void>
+
+  addDebt: (input: Omit<Debt, 'id' | 'createdAt'>) => Promise<void>
+  deleteDebt: (id: string) => Promise<void>
+  addDebtPayment: (input: Omit<DebtPayment, 'id' | 'createdAt'>) => Promise<void>
+  deleteDebtPayment: (id: string) => Promise<void>
 
   saveCategory: (input: Omit<Category, 'id'> & { id?: string }) => Promise<void>
   deleteCategory: (id: string) => Promise<void>
@@ -155,6 +163,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
           setPostedCount(run.posted)
         }
 
+        // Deposits are paid their interest for every finished month, after the
+        // recurring rules so a salary posted today already counts.
+        const interest = accrueInterest(next.accounts, next, next.categories)
+        if (interest.accounts.length > 0) {
+          next = {
+            ...next,
+            transactions: [...interest.transactions, ...next.transactions],
+            accounts: replaceRows(next.accounts, interest.accounts),
+          }
+          await repo.putMany('transactions', interest.transactions)
+          await repo.putMany('accounts', interest.accounts)
+        }
+
         // Standing tasks land on every day they were due, the same way. Done
         // before the first paint so the task list never flashes empty.
         const spawned = spawnTasks(next.taskTemplates, next.tasks)
@@ -238,6 +259,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
         )
       },
 
+      async addDebt(input) {
+        const row: Debt = { ...input, id: 'd-' + uid(), createdAt: stamp() }
+        await commit({ ...data, debts: [row, ...data.debts] }, (r) => r.put('debts', row))
+      },
+      async deleteDebt(id) {
+        const payments = data.debtPayments.filter((p) => p.debtId === id)
+        await commit(
+          {
+            ...data,
+            debts: data.debts.filter((d) => d.id !== id),
+            debtPayments: data.debtPayments.filter((p) => p.debtId !== id),
+          },
+          async (r) => {
+            for (const p of payments) await r.remove('debtPayments', p.id)
+            await r.remove('debts', id)
+          },
+        )
+      },
+      async addDebtPayment(input) {
+        const row: DebtPayment = { ...input, id: 'dp-' + uid(), createdAt: stamp() }
+        await commit({ ...data, debtPayments: [...data.debtPayments, row] }, (r) =>
+          r.put('debtPayments', row),
+        )
+      },
+      async deleteDebtPayment(id) {
+        await commit(
+          { ...data, debtPayments: data.debtPayments.filter((p) => p.id !== id) },
+          (r) => r.remove('debtPayments', id),
+        )
+      },
+
       async addTransfer(input) {
         const row: Transfer = { ...input, id: 'tr-' + uid(), createdAt: stamp() }
         await commit({ ...data, transfers: [row, ...data.transfers] }, (r) => r.put('transfers', row))
@@ -296,7 +348,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const current = data.accounts.find((a) => a.id === input.id)
         // A new account goes to the end, so it never takes over as the default.
         const sort = current?.sort ?? Math.max(-1, ...data.accounts.map((a) => a.sort)) + 1
-        const row: Account = { ...input, id: input.id ?? 'a-' + uid(), sort }
+        const rate = input.interestRate && input.interestRate > 0 ? input.interestRate : undefined
+        const row: Account = {
+          ...input,
+          id: input.id ?? 'a-' + uid(),
+          sort,
+          interestRate: rate,
+          interestDay: rate ? input.interestDay : undefined,
+          // Interest counts from the day a rate first appears; changing the
+          // rate keeps the running period, clearing it stops the payments.
+          interestFrom: rate
+            ? (current?.interestRate ? current.interestFrom : undefined) ?? todayISO()
+            : undefined,
+        }
         const exists = Boolean(current)
         await commit(
           {
@@ -323,12 +387,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Transfers go with the account on either end, or the other side would
         // keep money that came from nowhere.
         const touches = (t: Transfer) => t.fromAccountId === id || t.toAccountId === id
+        // Debts made from this account go too, with every repayment against them.
+        const goneDebts = new Set(data.debts.filter((d) => d.accountId === id).map((d) => d.id))
+        const paymentGoes = (p: DebtPayment) => p.accountId === id || goneDebts.has(p.debtId)
         await commit(
           {
             ...data,
             accounts: data.accounts.filter((a) => a.id !== id),
             transactions: data.transactions.filter((t) => t.accountId !== id),
             transfers: data.transfers.filter((t) => !touches(t)),
+            debts: data.debts.filter((d) => !goneDebts.has(d.id)),
+            debtPayments: data.debtPayments.filter((p) => !paymentGoes(p)),
           },
           async (r) => {
             for (const t of data.transactions.filter((t) => t.accountId === id)) {
@@ -337,6 +406,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             for (const t of data.transfers.filter(touches)) {
               await r.remove('transfers', t.id)
             }
+            for (const p of data.debtPayments.filter(paymentGoes)) {
+              await r.remove('debtPayments', p.id)
+            }
+            for (const debtId of goneDebts) await r.remove('debts', debtId)
             await r.remove('accounts', id)
           },
         )
@@ -528,6 +601,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           ...data,
           transactions: [],
           transfers: [],
+          debts: [],
+          debtPayments: [],
           recurring: [],
           goals: [],
           contributions: [],

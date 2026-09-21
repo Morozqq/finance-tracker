@@ -9,6 +9,7 @@ import { Transactions } from './screens/Transactions'
 import { Goals } from './screens/Goals'
 import { More } from './screens/More'
 import { Recurring } from './screens/Recurring'
+import { Debts } from './screens/Debts'
 import { Tasks } from './screens/Tasks'
 import { Accounts, Categories } from './screens/Catalog'
 import { SignIn } from './screens/SignIn'
@@ -66,6 +67,7 @@ export function App() {
             />
             <Route path="/more" element={<More />} />
             <Route path="/more/recurring" element={<Recurring />} />
+            <Route path="/more/debts" element={<Debts />} />
             <Route path="/more/categories" element={<Categories />} />
             <Route path="/more/accounts" element={<Accounts />} />
             <Route path="*" element={<Dashboard onAdd={openNew} onDrill={setDrillOpen} />} />

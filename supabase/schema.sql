@@ -38,6 +38,13 @@ create table if not exists public.accounts (
 -- Порядок счетов появился позже: добавляем колонку и в уже созданную таблицу.
 alter table public.accounts add column if not exists sort_order integer not null default 0;
 
+-- Проценты по депозиту: ставка годовых, число месяца начисления и дата, с
+-- которой проценты ещё не выплачены.
+alter table public.accounts add column if not exists interest_rate numeric(5, 2);
+alter table public.accounts add column if not exists interest_day smallint
+  check (interest_day between 1 and 31);
+alter table public.accounts add column if not exists interest_from date;
+
 create table if not exists public.recurring_rules (
   id          text primary key,
   user_id     uuid not null references auth.users (id) on delete cascade,
@@ -79,6 +86,31 @@ create table if not exists public.transfers (
   note            text,
   created_at      timestamptz not null default now(),
   check (from_account_id <> to_account_id)
+);
+
+-- Долги: кому дал (lent) и у кого взял (borrowed). Как и перевод, меняют
+-- остаток счёта, но не доход и не расход. Возвраты — частями или целиком.
+create table if not exists public.debts (
+  id          text primary key,
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  direction   text not null check (direction in ('lent', 'borrowed')),
+  person      text not null,
+  amount      numeric(14, 2) not null check (amount > 0),
+  account_id  text not null references public.accounts (id) on delete cascade,
+  occurred_at date not null,
+  due_at      date,
+  note        text,
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.debt_payments (
+  id          text primary key,
+  user_id     uuid not null references auth.users (id) on delete cascade,
+  debt_id     text not null references public.debts (id) on delete cascade,
+  amount      numeric(14, 2) not null check (amount > 0),
+  account_id  text not null references public.accounts (id) on delete cascade,
+  occurred_at date not null,
+  created_at  timestamptz not null default now()
 );
 
 create table if not exists public.goals (
@@ -130,6 +162,10 @@ create index if not exists transactions_user_category_idx
   on public.transactions (user_id, category_id, occurred_at desc);
 create index if not exists transfers_user_date_idx
   on public.transfers (user_id, occurred_at desc);
+create index if not exists debts_user_date_idx
+  on public.debts (user_id, occurred_at desc);
+create index if not exists debt_payments_debt_idx
+  on public.debt_payments (debt_id);
 create index if not exists recurring_user_next_idx
   on public.recurring_rules (user_id, next_run_at);
 create index if not exists contributions_goal_idx
@@ -145,6 +181,8 @@ alter table public.accounts            enable row level security;
 alter table public.recurring_rules     enable row level security;
 alter table public.transactions        enable row level security;
 alter table public.transfers           enable row level security;
+alter table public.debts               enable row level security;
+alter table public.debt_payments       enable row level security;
 alter table public.goals               enable row level security;
 alter table public.goal_contributions  enable row level security;
 alter table public.task_templates      enable row level security;
@@ -156,7 +194,8 @@ declare
 begin
   foreach t in array array[
     'app_settings', 'categories', 'accounts',
-    'recurring_rules', 'transactions', 'transfers', 'goals', 'goal_contributions',
+    'recurring_rules', 'transactions', 'transfers', 'debts', 'debt_payments',
+    'goals', 'goal_contributions',
     'task_templates', 'tasks'
   ]
   loop
