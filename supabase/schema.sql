@@ -31,8 +31,12 @@ create table if not exists public.accounts (
   type            text not null check (type in ('cash', 'card', 'savings')),
   initial_balance numeric(14, 2) not null default 0,
   color           text not null,
+  sort_order      integer not null default 0,
   archived        boolean not null default false
 );
+
+-- Порядок счетов появился позже: добавляем колонку и в уже созданную таблицу.
+alter table public.accounts add column if not exists sort_order integer not null default 0;
 
 create table if not exists public.recurring_rules (
   id          text primary key,

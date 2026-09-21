@@ -22,6 +22,8 @@ export interface Account {
   type: 'cash' | 'card' | 'savings'
   initialBalance: Tenge
   color: string
+  /** Position set by dragging in Счета; the first account is the default one. */
+  sort: number
   archived?: boolean
 }
 

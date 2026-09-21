@@ -88,7 +88,10 @@ export class LocalRepo implements Repo {
 function migrate(stored: Snapshot): Snapshot {
   return {
     categories: stored.categories ?? [],
-    accounts: stored.accounts ?? [],
+    // Accounts written before manual ordering keep the order they were stored in.
+    accounts: (stored.accounts ?? [])
+      .map((a, i) => ({ ...a, sort: a.sort ?? i }))
+      .sort((a, b) => a.sort - b.sort),
     transactions: stored.transactions ?? [],
     transfers: stored.transfers ?? [],
     recurring: stored.recurring ?? [],

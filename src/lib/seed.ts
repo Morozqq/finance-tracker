@@ -45,9 +45,16 @@ export function defaultCategories(): Category[] {
 
 export function defaultAccounts(): Account[] {
   return [
-    { id: 'a-' + uid(), name: 'Карта', type: 'card', initialBalance: 0, color: '#3D93D6' },
-    { id: 'a-' + uid(), name: 'Наличные', type: 'cash', initialBalance: 0, color: '#8BB33D' },
-    { id: 'a-' + uid(), name: 'Накопления', type: 'savings', initialBalance: 0, color: '#2FAF8C' },
+    { id: 'a-' + uid(), name: 'Карта', type: 'card', initialBalance: 0, color: '#3D93D6', sort: 0 },
+    { id: 'a-' + uid(), name: 'Наличные', type: 'cash', initialBalance: 0, color: '#8BB33D', sort: 1 },
+    {
+      id: 'a-' + uid(),
+      name: 'Накопления',
+      type: 'savings',
+      initialBalance: 0,
+      color: '#2FAF8C',
+      sort: 2,
+    },
   ]
 }
 

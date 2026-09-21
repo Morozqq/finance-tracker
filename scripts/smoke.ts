@@ -14,6 +14,8 @@ import {
 const snap = demoSnapshot()
 assert.ok(snap.transactions.length > 30, 'demo has transactions')
 assert.ok(snap.categories.length === 14, 'default categories')
+// Accounts carry a manual position; the first one is the default in new entries.
+assert.deepEqual(snap.accounts.map((a) => a.sort), [0, 1, 2])
 
 // Money formatting uses the Russian grouping plus the tenge mark.
 // Intl groups with a non-breaking space, so compare on the digits themselves.

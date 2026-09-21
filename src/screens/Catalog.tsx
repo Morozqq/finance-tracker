@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash } from '@phosphor-icons/react'
 import { useApp } from '../data/store'
 import { Sheet } from '../components/Sheet'
+import { SortableList } from '../components/SortableList'
 import {
   Badge,
   Button,
@@ -17,6 +18,14 @@ import { accountBalance } from '../lib/analytics'
 import { money, num, plural } from '../lib/format'
 import type { Account, Category, TxKind } from '../lib/types'
 
+function DragHint() {
+  return (
+    <p className="px-1 text-[12.5px] text-faint">
+      Удерживайте строку и перетащите, чтобы поменять порядок.
+    </p>
+  )
+}
+
 function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
@@ -31,7 +40,7 @@ function AddButton({ onClick, label }: { onClick: () => void; label: string }) {
 }
 
 export function Categories() {
-  const { data, saveCategory, deleteCategory } = useApp()
+  const { data, saveCategory, deleteCategory, reorderCategories } = useApp()
   const [kind, setKind] = useState<TxKind>('expense')
   const [editing, setEditing] = useState<Category | null>(null)
   const [creating, setCreating] = useState(false)
@@ -56,24 +65,29 @@ export function Categories() {
           ]}
         />
 
-        <Card className="flex flex-col gap-1 p-2">
-          {list.map((category) => {
-            const used = data.transactions.filter((t) => t.categoryId === category.id).length
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => setEditing(category)}
-                className="flex items-center gap-3 rounded-[var(--r-md)] px-2 py-2 text-left transition active:bg-surface-2"
-              >
-                <Badge icon={category.icon} color={category.color} size={38} />
-                <span className="flex-1 truncate text-[15px] font-medium">{category.name}</span>
-                <span className="text-[12.5px] text-faint">
-                  {used} {plural(used, 'запись', 'записи', 'записей')}
-                </span>
-              </button>
-            )
-          })}
+        <DragHint />
+
+        <Card className="p-2">
+          <SortableList
+            items={list}
+            onOpen={setEditing}
+            onCommit={(ids) => void reorderCategories(ids)}
+          >
+            {(category) => {
+              const used = data.transactions.filter((t) => t.categoryId === category.id).length
+              return (
+                <>
+                  <Badge icon={category.icon} color={category.color} size={38} />
+                  <span className="min-w-0 flex-1 truncate text-[15px] font-medium">
+                    {category.name}
+                  </span>
+                  <span className="shrink-0 text-[12.5px] text-faint">
+                    {used} {plural(used, 'запись', 'записи', 'записей')}
+                  </span>
+                </>
+              )
+            }}
+          </SortableList>
         </Card>
       </div>
 
@@ -234,7 +248,7 @@ function CategorySheet({
 }
 
 export function Accounts() {
-  const { data, saveAccount, deleteAccount } = useApp()
+  const { data, saveAccount, deleteAccount, reorderAccounts } = useApp()
   const [editing, setEditing] = useState<Account | null>(null)
   const [creating, setCreating] = useState(false)
 
@@ -244,26 +258,35 @@ export function Accounts() {
       back="/more"
       action={<AddButton onClick={() => setCreating(true)} label="Новый счёт" />}
     >
-      <Card className="flex flex-col gap-1 p-2">
-        {data.accounts.map((account) => (
-          <button
-            key={account.id}
-            type="button"
-            onClick={() => setEditing(account)}
-            className="flex items-center gap-3 rounded-[var(--r-md)] px-2 py-2.5 text-left transition active:bg-surface-2"
+      <div className="flex flex-col gap-3">
+        <DragHint />
+        <Card className="p-2">
+          <SortableList
+            items={data.accounts}
+            onOpen={setEditing}
+            onCommit={(ids) => void reorderAccounts(ids)}
           >
-            <span
-              className="size-2.5 shrink-0 rounded-full"
-              style={{ background: account.color }}
-              aria-hidden="true"
-            />
-            <span className="flex-1 truncate text-[15px] font-medium">{account.name}</span>
-            <span className="tnum text-[15px] font-semibold">
-              {money(accountBalance(account, data.transactions, data.transfers))}
-            </span>
-          </button>
-        ))}
-      </Card>
+            {(account) => (
+              <>
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ background: account.color }}
+                  aria-hidden="true"
+                />
+                <span className="min-w-0 flex-1 truncate text-[15px] font-medium">
+                  {account.name}
+                </span>
+                <span className="tnum shrink-0 text-[15px] font-semibold">
+                  {money(accountBalance(account, data.transactions, data.transfers))}
+                </span>
+              </>
+            )}
+          </SortableList>
+        </Card>
+        <p className="px-1 text-[12.5px] leading-relaxed text-faint">
+          Первый счёт в списке выбирается по умолчанию в новых операциях.
+        </p>
+      </div>
 
       <AccountSheet
         open={creating || editing !== null}
@@ -306,7 +329,7 @@ function AccountSheet({
   open: boolean
   account: Account | null
   onClose: () => void
-  onSave: (input: Omit<Account, 'id'> & { id?: string }) => Promise<void>
+  onSave: (input: Omit<Account, 'id' | 'sort'> & { id?: string }) => Promise<void>
   onDelete?: () => Promise<void>
 }) {
   const [name, setName] = useState('')

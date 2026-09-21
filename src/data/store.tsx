@@ -59,9 +59,12 @@ interface AppValue {
 
   saveCategory: (input: Omit<Category, 'id'> & { id?: string }) => Promise<void>
   deleteCategory: (id: string) => Promise<void>
+  /** Takes the ids of one kind in their new order. */
+  reorderCategories: (ids: string[]) => Promise<void>
 
-  saveAccount: (input: Omit<Account, 'id'> & { id?: string }) => Promise<void>
+  saveAccount: (input: Omit<Account, 'id' | 'sort'> & { id?: string }) => Promise<void>
   deleteAccount: (id: string) => Promise<void>
+  reorderAccounts: (ids: string[]) => Promise<void>
 
   saveRule: (input: Omit<RecurringRule, 'id' | 'createdAt'> & { id?: string }) => Promise<void>
   deleteRule: (id: string) => Promise<void>
@@ -263,6 +266,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
           (r) => r.put('categories', row),
         )
       },
+      async reorderCategories(ids) {
+        const position = new Map(ids.map((id, i) => [id, i]))
+        const moved = data.categories
+          .filter((c) => position.has(c.id) && c.sort !== position.get(c.id))
+          .map((c) => ({ ...c, sort: position.get(c.id)! }))
+        if (moved.length === 0) return
+        await commit({ ...data, categories: replaceRows(data.categories, moved) }, (r) =>
+          r.putMany('categories', moved),
+        )
+      },
       async deleteCategory(id) {
         await commit(
           {
@@ -280,8 +293,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
 
       async saveAccount(input) {
-        const row: Account = { ...input, id: input.id ?? 'a-' + uid() }
-        const exists = data.accounts.some((a) => a.id === row.id)
+        const current = data.accounts.find((a) => a.id === input.id)
+        // A new account goes to the end, so it never takes over as the default.
+        const sort = current?.sort ?? Math.max(-1, ...data.accounts.map((a) => a.sort)) + 1
+        const row: Account = { ...input, id: input.id ?? 'a-' + uid(), sort }
+        const exists = Boolean(current)
         await commit(
           {
             ...data,
@@ -291,6 +307,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
           },
           (r) => r.put('accounts', row),
         )
+      },
+      async reorderAccounts(ids) {
+        const next = ids
+          .map((id, sort) => {
+            const account = data.accounts.find((a) => a.id === id)
+            return account && { ...account, sort }
+          })
+          .filter((a): a is Account => Boolean(a))
+        const moved = next.filter((a) => data.accounts.find((b) => b.id === a.id)?.sort !== a.sort)
+        if (moved.length === 0) return
+        await commit({ ...data, accounts: next }, (r) => r.putMany('accounts', moved))
       },
       async deleteAccount(id) {
         // Transfers go with the account on either end, or the other side would

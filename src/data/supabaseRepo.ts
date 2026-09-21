@@ -48,6 +48,7 @@ const toDb = {
     type: a.type,
     initial_balance: a.initialBalance,
     color: a.color,
+    sort_order: a.sort,
     archived: a.archived ?? false,
   }),
   transactions: (t: Transaction, user_id: string) => ({
@@ -140,6 +141,7 @@ const fromDb = {
     type: r.type as Account['type'],
     initialBalance: Number(r.initial_balance ?? 0),
     color: r.color as string,
+    sort: Number(r.sort_order ?? 0),
     archived: (r.archived as boolean) ?? false,
   }),
   transactions: (r: Row): Transaction => ({
@@ -249,7 +251,9 @@ export class SupabaseRepo implements Repo {
 
     const snapshot: Snapshot = {
       categories: (cats.data ?? []).map(fromDb.categories),
-      accounts: (accs.data ?? []).map(fromDb.accounts),
+      // Sorted here rather than in SQL: an old schema without sort_order must
+      // still load. Equal positions keep the alphabetical order from the query.
+      accounts: (accs.data ?? []).map(fromDb.accounts).sort((a, b) => a.sort - b.sort),
       transactions: (txs.data ?? []).map(fromDb.transactions),
       transfers: optionalRows(transfers).map(fromDb.transfers),
       recurring: (recs.data ?? []).map(fromDb.recurring),
