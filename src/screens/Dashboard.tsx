@@ -54,8 +54,8 @@ export function Dashboard({
     [scoped, data.categories],
   )
   const worth = useMemo(
-    () => netWorth(data.accounts, data.transactions),
-    [data.accounts, data.transactions],
+    () => netWorth(data.accounts, data.transactions, data.transfers),
+    [data.accounts, data.transactions, data.transfers],
   )
 
   const byMonth = period === 'year' || period === 'all'
@@ -201,7 +201,7 @@ export function Dashboard({
                   {account.name}
                 </span>
                 <span className="tnum mt-0.5 block text-[15px] font-semibold">
-                  {money(accountBalance(account, data.transactions))}
+                  {money(accountBalance(account, data.transactions, data.transfers))}
                 </span>
               </div>
             ))}

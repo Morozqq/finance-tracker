@@ -10,6 +10,7 @@ import type {
   Task,
   TaskTemplate,
   Transaction,
+  Transfer,
 } from '../lib/types'
 import { requireClient } from './supabase'
 import { defaultAccounts, defaultCategories } from '../lib/seed'
@@ -19,6 +20,7 @@ const TABLE: Record<TableKey, string> = {
   categories: 'categories',
   accounts: 'accounts',
   transactions: 'transactions',
+  transfers: 'transfers',
   recurring: 'recurring_rules',
   goals: 'goals',
   contributions: 'goal_contributions',
@@ -58,6 +60,16 @@ const toDb = {
     occurred_at: t.occurredAt,
     note: t.note ?? null,
     recurring_id: t.recurringId ?? null,
+    created_at: t.createdAt,
+  }),
+  transfers: (t: Transfer, user_id: string) => ({
+    id: t.id,
+    user_id,
+    from_account_id: t.fromAccountId,
+    to_account_id: t.toAccountId,
+    amount: t.amount,
+    occurred_at: t.occurredAt,
+    note: t.note ?? null,
     created_at: t.createdAt,
   }),
   recurring: (r: RecurringRule, user_id: string) => ({
@@ -141,6 +153,15 @@ const fromDb = {
     recurringId: (r.recurring_id as string) ?? undefined,
     createdAt: r.created_at as string,
   }),
+  transfers: (r: Row): Transfer => ({
+    id: r.id as string,
+    fromAccountId: r.from_account_id as string,
+    toAccountId: r.to_account_id as string,
+    amount: Number(r.amount ?? 0),
+    occurredAt: r.occurred_at as string,
+    note: (r.note as string) ?? undefined,
+    createdAt: r.created_at as string,
+  }),
   recurring: (r: Row): RecurringRule => ({
     id: r.id as string,
     title: r.title as string,
@@ -189,8 +210,8 @@ const fromDb = {
 }
 
 /**
- * Task tables came after the first schema. Until schema.sql is re-run they do
- * not exist, and the finance screens must keep working in the meantime.
+ * Task and transfer tables came after the first schema. Until schema.sql is
+ * re-run they do not exist, and the rest of the app must keep working.
  */
 function optionalRows(result: { data: Row[] | null; error: { code?: string; message: string } | null }): Row[] {
   if (!result.error) return result.data ?? []
@@ -208,18 +229,20 @@ export class SupabaseRepo implements Repo {
 
   async load(): Promise<Snapshot> {
     const db = requireClient()
-    const [cats, accs, txs, recs, goals, contribs, settings, tasks, templates] = await Promise.all([
-      db.from('categories').select('*').order('sort_order'),
-      db.from('accounts').select('*').order('name'),
-      db.from('transactions').select('*').order('occurred_at', { ascending: false }),
-      db.from('recurring_rules').select('*').order('next_run_at'),
-      db.from('goals').select('*').order('created_at'),
-      db.from('goal_contributions').select('*').order('occurred_at'),
-      db.from('app_settings').select('*').eq('user_id', this.userId).maybeSingle(),
-      // Newest first: if the row cap ever bites, it is old history that drops.
-      db.from('tasks').select('*').order('day', { ascending: false }),
-      db.from('task_templates').select('*').order('created_at'),
-    ])
+    const [cats, accs, txs, recs, goals, contribs, settings, tasks, templates, transfers] =
+      await Promise.all([
+        db.from('categories').select('*').order('sort_order'),
+        db.from('accounts').select('*').order('name'),
+        db.from('transactions').select('*').order('occurred_at', { ascending: false }),
+        db.from('recurring_rules').select('*').order('next_run_at'),
+        db.from('goals').select('*').order('created_at'),
+        db.from('goal_contributions').select('*').order('occurred_at'),
+        db.from('app_settings').select('*').eq('user_id', this.userId).maybeSingle(),
+        // Newest first: if the row cap ever bites, it is old history that drops.
+        db.from('tasks').select('*').order('day', { ascending: false }),
+        db.from('task_templates').select('*').order('created_at'),
+        db.from('transfers').select('*').order('occurred_at', { ascending: false }),
+      ])
 
     const failure = [cats, accs, txs, recs, goals, contribs].find((r) => r.error)
     if (failure?.error) throw new Error(failure.error.message)
@@ -228,6 +251,7 @@ export class SupabaseRepo implements Repo {
       categories: (cats.data ?? []).map(fromDb.categories),
       accounts: (accs.data ?? []).map(fromDb.accounts),
       transactions: (txs.data ?? []).map(fromDb.transactions),
+      transfers: optionalRows(transfers).map(fromDb.transfers),
       recurring: (recs.data ?? []).map(fromDb.recurring),
       goals: (goals.data ?? []).map(fromDb.goals),
       contributions: (contribs.data ?? []).map(fromDb.contributions),
@@ -284,6 +308,7 @@ export class SupabaseRepo implements Repo {
     ])
     await Promise.all([
       this.putMany('transactions', snapshot.transactions),
+      this.putMany('transfers', snapshot.transfers),
       this.putMany('recurring', snapshot.recurring),
       this.putMany('goals', snapshot.goals),
     ])
@@ -295,7 +320,7 @@ export class SupabaseRepo implements Repo {
 
   async clearRecords(): Promise<void> {
     const db = requireClient()
-    for (const table of ['goal_contributions', 'goals', 'transactions', 'recurring_rules']) {
+    for (const table of ['goal_contributions', 'goals', 'transactions', 'transfers', 'recurring_rules']) {
       const { error } = await db.from(table).delete().eq('user_id', this.userId)
       if (error) throw new Error(error.message)
     }

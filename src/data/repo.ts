@@ -9,6 +9,7 @@ import type {
   Task,
   TaskTemplate,
   Transaction,
+  Transfer,
 } from '../lib/types'
 
 /** Tables the app writes to. Names match the Supabase schema. */
@@ -16,6 +17,7 @@ export type TableKey =
   | 'categories'
   | 'accounts'
   | 'transactions'
+  | 'transfers'
   | 'recurring'
   | 'goals'
   | 'contributions'
@@ -28,15 +30,17 @@ export type RowOf<K extends TableKey> = K extends 'categories'
     ? Account
     : K extends 'transactions'
       ? Transaction
-      : K extends 'recurring'
-        ? RecurringRule
-        : K extends 'goals'
-          ? Goal
-          : K extends 'tasks'
-            ? Task
-            : K extends 'taskTemplates'
-              ? TaskTemplate
-              : GoalContribution
+      : K extends 'transfers'
+        ? Transfer
+        : K extends 'recurring'
+          ? RecurringRule
+          : K extends 'goals'
+            ? Goal
+            : K extends 'tasks'
+              ? Task
+              : K extends 'taskTemplates'
+                ? TaskTemplate
+                : GoalContribution
 
 /**
  * One interface, two implementations. The screens never learn which one is

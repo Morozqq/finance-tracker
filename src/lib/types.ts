@@ -38,6 +38,19 @@ export interface Transaction {
   createdAt: string
 }
 
+/** Money moved between two of the user's own accounts. It is neither income
+ *  nor spending: balances move, totals and categories do not. */
+export interface Transfer {
+  id: string
+  fromAccountId: string
+  toAccountId: string
+  amount: Tenge
+  /** ISO calendar day, YYYY-MM-DD. */
+  occurredAt: string
+  note?: string
+  createdAt: string
+}
+
 export interface RecurringRule {
   id: string
   title: string
@@ -107,6 +120,7 @@ export interface Snapshot {
   categories: Category[]
   accounts: Account[]
   transactions: Transaction[]
+  transfers: Transfer[]
   recurring: RecurringRule[]
   goals: Goal[]
   contributions: GoalContribution[]

@@ -9,7 +9,7 @@ import {
   subMonths,
 } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import type { Account, Category, GoalContribution, Transaction, TxKind } from './types'
+import type { Account, Category, GoalContribution, Transaction, Transfer, TxKind } from './types'
 
 export type Period = 'month' | 'prev' | 'year' | 'all'
 
@@ -50,7 +50,7 @@ export function periodOptions(now = new Date()): Array<{ value: Period; label: s
   ]
 }
 
-export function inRange(tx: Transaction, range: Range): boolean {
+export function inRange(tx: { occurredAt: string }, range: Range): boolean {
   return tx.occurredAt >= range.from && tx.occurredAt <= range.to
 }
 
@@ -166,26 +166,44 @@ export function monthlySeries(transactions: Transaction[], months: number, now =
   return out
 }
 
-export function accountBalance(account: Account, transactions: Transaction[]): number {
+export function accountBalance(
+  account: Account,
+  transactions: Transaction[],
+  transfers: Transfer[],
+): number {
   let balance = account.initialBalance
   for (const t of transactions) {
     if (t.accountId !== account.id) continue
     balance += t.kind === 'income' ? t.amount : -t.amount
   }
+  for (const t of transfers) {
+    if (t.fromAccountId === account.id) balance -= t.amount
+    if (t.toAccountId === account.id) balance += t.amount
+  }
   return balance
 }
 
-export function netWorth(accounts: Account[], transactions: Transaction[]): number {
-  return accounts.reduce((sum, a) => sum + accountBalance(a, transactions), 0)
+/** Transfers cancel out here: what leaves one account lands in another. */
+export function netWorth(
+  accounts: Account[],
+  transactions: Transaction[],
+  transfers: Transfer[],
+): number {
+  return accounts.reduce((sum, a) => sum + accountBalance(a, transactions, transfers), 0)
+}
+
+export function isTransfer(entry: Transaction | Transfer): entry is Transfer {
+  return 'fromAccountId' in entry
 }
 
 export function goalSaved(goalId: string, contributions: GoalContribution[]): number {
   return contributions.reduce((sum, c) => (c.goalId === goalId ? sum + c.amount : sum), 0)
 }
 
-/** Groups transactions into day sections, newest first. */
-export function groupByDay(transactions: Transaction[]) {
-  const map = new Map<string, Transaction[]>()
+/** Groups entries into day sections, newest first. Day sums count income and
+ *  spending only, so transfers show up in the list without moving them. */
+export function groupByDay<T extends Transaction | Transfer>(transactions: T[]) {
+  const map = new Map<string, T[]>()
   for (const t of transactions) {
     const list = map.get(t.occurredAt)
     if (list) list.push(t)
@@ -196,7 +214,7 @@ export function groupByDay(transactions: Transaction[]) {
     .map(([date, items]) => ({
       date,
       items: items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
-      expense: items.reduce((s, t) => s + (t.kind === 'expense' ? t.amount : 0), 0),
-      income: items.reduce((s, t) => s + (t.kind === 'income' ? t.amount : 0), 0),
+      expense: items.reduce((s, t) => s + (!isTransfer(t) && t.kind === 'expense' ? t.amount : 0), 0),
+      income: items.reduce((s, t) => s + (!isTransfer(t) && t.kind === 'income' ? t.amount : 0), 0),
     }))
 }

@@ -1,5 +1,5 @@
 import { addDays, format, subDays } from 'date-fns'
-import type { Account, Category, Goal, RecurringRule, Snapshot, Transaction } from './types'
+import type { Account, Category, Goal, RecurringRule, Snapshot, Transaction, Transfer } from './types'
 import { uid } from './format'
 
 const day = (d: Date) => format(d, 'yyyy-MM-dd')
@@ -114,6 +114,18 @@ export function demoSnapshot(): Snapshot {
   push('expense', 62000, 'Учёба', card, 29, 'Курс английского')
   push('expense', 4300, 'Прочее', cash, 11)
 
+  const transfers: Transfer[] = [
+    {
+      id: 'tr-' + uid(),
+      fromAccountId: card,
+      toAccountId: accounts[2].id,
+      amount: 150000,
+      occurredAt: day(subDays(now, 3)),
+      note: 'Отложить с зарплаты',
+      createdAt: stamp,
+    },
+  ]
+
   const recurring: RecurringRule[] = [
     {
       id: 'r-' + uid(),
@@ -207,6 +219,7 @@ export function demoSnapshot(): Snapshot {
     categories,
     accounts,
     transactions,
+    transfers,
     recurring,
     goals,
     contributions,
@@ -221,6 +234,7 @@ export function emptySnapshot(): Snapshot {
     categories: defaultCategories(),
     accounts: defaultAccounts(),
     transactions: [],
+    transfers: [],
     recurring: [],
     goals: [],
     contributions: [],

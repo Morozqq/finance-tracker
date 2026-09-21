@@ -12,12 +12,12 @@ import { Recurring } from './screens/Recurring'
 import { Tasks } from './screens/Tasks'
 import { Accounts, Categories } from './screens/Catalog'
 import { SignIn } from './screens/SignIn'
-import type { Transaction } from './lib/types'
+import type { Transaction, Transfer } from './lib/types'
 
 export function App() {
   const { needsAuth, error } = useApp()
   const [sheetOpen, setSheetOpen] = useState(false)
-  const [editing, setEditing] = useState<Transaction | null>(null)
+  const [editing, setEditing] = useState<Transaction | Transfer | null>(null)
   const [drillOpen, setDrillOpen] = useState(false)
   const [taskSheetOpen, setTaskSheetOpen] = useState(false)
   const location = useLocation()
@@ -32,8 +32,8 @@ export function App() {
     setEditing(null)
     setSheetOpen(true)
   }
-  const openEdit = (tx: Transaction) => {
-    setEditing(tx)
+  const openEdit = (entry: Transaction | Transfer) => {
+    setEditing(entry)
     setSheetOpen(true)
   }
 

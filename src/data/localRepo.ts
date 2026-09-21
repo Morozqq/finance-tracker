@@ -70,6 +70,7 @@ export class LocalRepo implements Repo {
     await this.flush({
       ...current,
       transactions: [],
+      transfers: [],
       recurring: [],
       goals: [],
       contributions: [],
@@ -89,6 +90,7 @@ function migrate(stored: Snapshot): Snapshot {
     categories: stored.categories ?? [],
     accounts: stored.accounts ?? [],
     transactions: stored.transactions ?? [],
+    transfers: stored.transfers ?? [],
     recurring: stored.recurring ?? [],
     goals: stored.goals ?? [],
     contributions: stored.contributions ?? [],

@@ -3,19 +3,27 @@ import { MagnifyingGlass, X } from '@phosphor-icons/react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '../data/store'
 import { Button, Empty, Screen, Segmented, Skeleton, cx, inputClass } from '../components/ui'
-import { TransactionRow } from '../components/TransactionRow'
-import { groupByDay, inRange, periodOptions, rangeFor, totals, type Period } from '../lib/analytics'
+import { TransactionRow, TransferRow } from '../components/TransactionRow'
+import {
+  groupByDay,
+  inRange,
+  isTransfer,
+  periodOptions,
+  rangeFor,
+  totals,
+  type Period,
+} from '../lib/analytics'
 import { dayLabel, money, plural } from '../lib/format'
-import type { Transaction } from '../lib/types'
+import type { Transaction, Transfer } from '../lib/types'
 
 export function Transactions({
   onAdd,
   onEdit,
 }: {
   onAdd: () => void
-  onEdit: (tx: Transaction) => void
+  onEdit: (entry: Transaction | Transfer) => void
 }) {
-  const { data, ready, deleteTransaction } = useApp()
+  const { data, ready, deleteTransaction, deleteTransfer } = useApp()
   const [params, setParams] = useSearchParams()
   const [period, setPeriod] = useState<Period>('month')
   const [query, setQuery] = useState('')
@@ -39,8 +47,28 @@ export function Transactions({
     })
   }, [data.transactions, range, categoryFilter, query, categoryIndex])
 
-  const groups = useMemo(() => groupByDay(filtered), [filtered])
+  // Transfers have no category, so a category filter hides them.
+  const transfers = useMemo(() => {
+    if (categoryFilter) return []
+    const needle = query.trim().toLowerCase()
+    return data.transfers.filter((t) => {
+      if (!inRange(t, range)) return false
+      if (!needle) return true
+      const text = [
+        'перевод',
+        accountIndex.get(t.fromAccountId)?.name,
+        accountIndex.get(t.toAccountId)?.name,
+        t.note,
+      ]
+        .join(' ')
+        .toLowerCase()
+      return text.includes(needle)
+    })
+  }, [data.transfers, range, categoryFilter, query, accountIndex])
+
+  const groups = useMemo(() => groupByDay([...filtered, ...transfers]), [filtered, transfers])
   const sums = useMemo(() => totals(filtered), [filtered])
+  const count = filtered.length + transfers.length
   const activeCategory = categoryFilter ? categoryIndex.get(categoryFilter) : undefined
 
   if (!ready) {
@@ -91,10 +119,10 @@ export function Transactions({
           </button>
         )}
 
-        {filtered.length > 0 && (
+        {count > 0 && (
           <div className="flex items-baseline justify-between rounded-[var(--r-md)] bg-surface px-4 py-3">
             <span className="text-[13px] text-dim">
-              {filtered.length} {plural(filtered.length, 'операция', 'операции', 'операций')}
+              {count} {plural(count, 'операция', 'операции', 'операций')}
             </span>
             <span className="tnum text-[15px] font-semibold">
               {sums.income > 0 && <span className="text-pos">+{money(sums.income)}</span>}
@@ -130,16 +158,27 @@ export function Transactions({
                   </span>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  {group.items.map((tx) => (
-                    <TransactionRow
-                      key={tx.id}
-                      tx={tx}
-                      category={categoryIndex.get(tx.categoryId)}
-                      accountName={accountIndex.get(tx.accountId)?.name}
-                      onEdit={() => onEdit(tx)}
-                      onDelete={() => void deleteTransaction(tx.id)}
-                    />
-                  ))}
+                  {group.items.map((entry) =>
+                    isTransfer(entry) ? (
+                      <TransferRow
+                        key={entry.id}
+                        transfer={entry}
+                        fromName={accountIndex.get(entry.fromAccountId)?.name}
+                        toName={accountIndex.get(entry.toAccountId)?.name}
+                        onEdit={() => onEdit(entry)}
+                        onDelete={() => void deleteTransfer(entry.id)}
+                      />
+                    ) : (
+                      <TransactionRow
+                        key={entry.id}
+                        tx={entry}
+                        category={categoryIndex.get(entry.categoryId)}
+                        accountName={accountIndex.get(entry.accountId)?.name}
+                        onEdit={() => onEdit(entry)}
+                        onDelete={() => void deleteTransaction(entry.id)}
+                      />
+                    ),
+                  )}
                 </div>
               </section>
             ))}

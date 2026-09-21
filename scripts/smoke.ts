@@ -45,8 +45,39 @@ assert.ok(Math.abs(shareSum - 1) < 1e-9 || slices.length === 0, 'shares add up t
 
 // Balances.
 assert.equal(
-  netWorth(snap.accounts, snap.transactions),
-  snap.accounts.reduce((s, a) => s + accountBalance(a, snap.transactions), 0),
+  netWorth(snap.accounts, snap.transactions, snap.transfers),
+  snap.accounts.reduce((s, a) => s + accountBalance(a, snap.transactions, snap.transfers), 0),
+)
+
+// Transfers move money between accounts without changing the total.
+const [card, cash] = snap.accounts
+const move = [{
+  id: 'tr-x', fromAccountId: card.id, toAccountId: cash.id,
+  amount: 50000, occurredAt: todayISO(), createdAt: '',
+}]
+assert.equal(
+  accountBalance(card, snap.transactions, [...snap.transfers, ...move]),
+  accountBalance(card, snap.transactions, snap.transfers) - 50000,
+)
+assert.equal(
+  accountBalance(cash, snap.transactions, [...snap.transfers, ...move]),
+  accountBalance(cash, snap.transactions, snap.transfers) + 50000,
+)
+assert.equal(
+  netWorth(snap.accounts, snap.transactions, [...snap.transfers, ...move]),
+  netWorth(snap.accounts, snap.transactions, snap.transfers),
+  'a transfer leaves the total alone',
+)
+// ...and never count as income or spending in the day sums.
+const mixed = groupByDay([...snap.transactions.filter((t) => t.occurredAt === todayISO()), ...move])
+const todayGroup = mixed.find((g) => g.date === todayISO())!
+assert.ok(todayGroup.items.some((i) => i.id === 'tr-x'), 'transfer listed with its day')
+assert.equal(
+  todayGroup.expense + todayGroup.income,
+  snap.transactions
+    .filter((t) => t.occurredAt === todayISO())
+    .reduce((s, t) => s + t.amount, 0),
+  'day sums ignore transfers',
 )
 
 // Grouping keeps every row and orders days newest first.

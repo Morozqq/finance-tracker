@@ -64,6 +64,19 @@ create table if not exists public.transactions (
   created_at   timestamptz not null default now()
 );
 
+-- Перевод между своими счетами: не доход и не расход, меняет только остатки.
+create table if not exists public.transfers (
+  id              text primary key,
+  user_id         uuid not null references auth.users (id) on delete cascade,
+  from_account_id text not null references public.accounts (id) on delete cascade,
+  to_account_id   text not null references public.accounts (id) on delete cascade,
+  amount          numeric(14, 2) not null check (amount > 0),
+  occurred_at     date not null,
+  note            text,
+  created_at      timestamptz not null default now(),
+  check (from_account_id <> to_account_id)
+);
+
 create table if not exists public.goals (
   id            text primary key,
   user_id       uuid not null references auth.users (id) on delete cascade,
@@ -111,6 +124,8 @@ create index if not exists transactions_user_date_idx
   on public.transactions (user_id, occurred_at desc);
 create index if not exists transactions_user_category_idx
   on public.transactions (user_id, category_id, occurred_at desc);
+create index if not exists transfers_user_date_idx
+  on public.transfers (user_id, occurred_at desc);
 create index if not exists recurring_user_next_idx
   on public.recurring_rules (user_id, next_run_at);
 create index if not exists contributions_goal_idx
@@ -125,6 +140,7 @@ alter table public.categories          enable row level security;
 alter table public.accounts            enable row level security;
 alter table public.recurring_rules     enable row level security;
 alter table public.transactions        enable row level security;
+alter table public.transfers           enable row level security;
 alter table public.goals               enable row level security;
 alter table public.goal_contributions  enable row level security;
 alter table public.task_templates      enable row level security;
@@ -136,7 +152,7 @@ declare
 begin
   foreach t in array array[
     'app_settings', 'categories', 'accounts',
-    'recurring_rules', 'transactions', 'goals', 'goal_contributions',
+    'recurring_rules', 'transactions', 'transfers', 'goals', 'goal_contributions',
     'task_templates', 'tasks'
   ]
   loop

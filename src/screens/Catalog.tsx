@@ -259,7 +259,7 @@ export function Accounts() {
             />
             <span className="flex-1 truncate text-[15px] font-medium">{account.name}</span>
             <span className="tnum text-[15px] font-semibold">
-              {money(accountBalance(account, data.transactions))}
+              {money(accountBalance(account, data.transactions, data.transfers))}
             </span>
           </button>
         ))}

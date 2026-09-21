@@ -20,6 +20,7 @@ import type {
   Task,
   TaskTemplate,
   Transaction,
+  Transfer,
 } from '../lib/types'
 import type { Repo } from './repo'
 import { LocalRepo } from './localRepo'
@@ -51,6 +52,10 @@ interface AppValue {
   addTransaction: (input: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>
   updateTransaction: (tx: Transaction) => Promise<void>
   deleteTransaction: (id: string) => Promise<void>
+
+  addTransfer: (input: Omit<Transfer, 'id' | 'createdAt'>) => Promise<void>
+  updateTransfer: (transfer: Transfer) => Promise<void>
+  deleteTransfer: (id: string) => Promise<void>
 
   saveCategory: (input: Omit<Category, 'id'> & { id?: string }) => Promise<void>
   deleteCategory: (id: string) => Promise<void>
@@ -230,6 +235,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         )
       },
 
+      async addTransfer(input) {
+        const row: Transfer = { ...input, id: 'tr-' + uid(), createdAt: stamp() }
+        await commit({ ...data, transfers: [row, ...data.transfers] }, (r) => r.put('transfers', row))
+      },
+      async updateTransfer(row) {
+        await commit({ ...data, transfers: replaceRows(data.transfers, [row]) }, (r) =>
+          r.put('transfers', row),
+        )
+      },
+      async deleteTransfer(id) {
+        await commit({ ...data, transfers: data.transfers.filter((t) => t.id !== id) }, (r) =>
+          r.remove('transfers', id),
+        )
+      },
+
       async saveCategory(input) {
         const row: Category = { ...input, id: input.id ?? 'c-' + uid() }
         const exists = data.categories.some((c) => c.id === row.id)
@@ -273,15 +293,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         )
       },
       async deleteAccount(id) {
+        // Transfers go with the account on either end, or the other side would
+        // keep money that came from nowhere.
+        const touches = (t: Transfer) => t.fromAccountId === id || t.toAccountId === id
         await commit(
           {
             ...data,
             accounts: data.accounts.filter((a) => a.id !== id),
             transactions: data.transactions.filter((t) => t.accountId !== id),
+            transfers: data.transfers.filter((t) => !touches(t)),
           },
           async (r) => {
             for (const t of data.transactions.filter((t) => t.accountId === id)) {
               await r.remove('transactions', t.id)
+            }
+            for (const t of data.transfers.filter(touches)) {
+              await r.remove('transfers', t.id)
             }
             await r.remove('accounts', id)
           },
@@ -473,6 +500,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const next: Snapshot = {
           ...data,
           transactions: [],
+          transfers: [],
           recurring: [],
           goals: [],
           contributions: [],

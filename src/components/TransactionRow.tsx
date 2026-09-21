@@ -1,26 +1,22 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
-import { Trash } from '@phosphor-icons/react'
+import { ArrowsLeftRight, Trash } from '@phosphor-icons/react'
 import { Badge } from './ui'
-import { signedMoney } from '../lib/format'
-import type { Category, Transaction } from '../lib/types'
+import { money, signedMoney } from '../lib/format'
+import type { Category, Transaction, Transfer } from '../lib/types'
 
 /**
  * Swiping left reveals a delete button rather than deleting outright: on a
  * list you scroll with your thumb, a one-gesture destroy is too easy to hit.
  */
-export function TransactionRow({
-  tx,
-  category,
-  accountName,
+function SwipeRow({
   onEdit,
   onDelete,
+  children,
 }: {
-  tx: Transaction
-  category?: Category
-  accountName?: string
   onEdit: () => void
   onDelete: () => void
+  children: ReactNode
 }) {
   const reduce = useReducedMotion()
   const [revealed, setRevealed] = useState(false)
@@ -54,23 +50,79 @@ export function TransactionRow({
           onClick={() => (revealed ? setRevealed(false) : onEdit())}
           className="flex w-full items-center gap-3 px-3 py-2.5 text-left"
         >
-          <Badge icon={category?.icon ?? 'dots'} color={category?.color ?? '#7C8794'} size={40} />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-medium">
-              {category?.name ?? 'Без категории'}
-            </span>
-            <span className="block truncate text-[12.5px] text-faint">
-              {tx.note ? tx.note : (accountName ?? '')}
-            </span>
-          </span>
-          <span
-            className="tnum shrink-0 text-[15px] font-semibold"
-            style={{ color: tx.kind === 'income' ? 'var(--positive)' : 'var(--text)' }}
-          >
-            {signedMoney(tx.amount, tx.kind)}
-          </span>
+          {children}
         </button>
       </motion.div>
     </div>
+  )
+}
+
+export function TransactionRow({
+  tx,
+  category,
+  accountName,
+  onEdit,
+  onDelete,
+}: {
+  tx: Transaction
+  category?: Category
+  accountName?: string
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <SwipeRow onEdit={onEdit} onDelete={onDelete}>
+      <Badge icon={category?.icon ?? 'dots'} color={category?.color ?? '#7C8794'} size={40} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-medium">
+          {category?.name ?? 'Без категории'}
+        </span>
+        <span className="block truncate text-[12.5px] text-faint">
+          {tx.note ? tx.note : (accountName ?? '')}
+        </span>
+      </span>
+      <span
+        className="tnum shrink-0 text-[15px] font-semibold"
+        style={{ color: tx.kind === 'income' ? 'var(--positive)' : 'var(--text)' }}
+      >
+        {signedMoney(tx.amount, tx.kind)}
+      </span>
+    </SwipeRow>
+  )
+}
+
+/** A transfer is neither a gain nor a loss, so its amount carries no sign or colour. */
+export function TransferRow({
+  transfer,
+  fromName,
+  toName,
+  onEdit,
+  onDelete,
+}: {
+  transfer: Transfer
+  fromName?: string
+  toName?: string
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <SwipeRow onEdit={onEdit} onDelete={onDelete}>
+      <span
+        className="grid size-10 shrink-0 place-items-center rounded-[calc(var(--r-md)-4px)] bg-surface-2 text-dim"
+        aria-hidden="true"
+      >
+        <ArrowsLeftRight size={20} weight="bold" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-medium">Перевод</span>
+        <span className="block truncate text-[12.5px] text-faint">
+          {fromName ?? 'Счёт'} → {toName ?? 'Счёт'}
+          {transfer.note ? ` · ${transfer.note}` : ''}
+        </span>
+      </span>
+      <span className="tnum shrink-0 text-[15px] font-semibold text-dim">
+        {money(transfer.amount)}
+      </span>
+    </SwipeRow>
   )
 }
