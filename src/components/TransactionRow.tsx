@@ -128,8 +128,9 @@ export function TransferRow({
 }
 
 /**
- * A debt or a repayment. Money moves between the account and a person, so like
- * a transfer it carries no colour; the sign says which way it went.
+ * A debt or a repayment. Money moves between the account and a person, not in
+ * or out of the budget, so like a transfer the amount carries no sign and no
+ * colour: which way it went is in the subtitle, as "счёт → кому".
  */
 export function DebtRow({
   entry,
@@ -150,6 +151,11 @@ export function DebtRow({
   // Money leaves the account when lending, or when paying back a loan.
   const outgoing = repayment ? !lent : lent
   const title = repayment ? 'Возврат долга' : lent ? 'Дал в долг' : 'Взял в долг'
+  // «Возврат долга» само по себе не говорит, к кому ушли деньги: вернуть могут
+  // как мне, так и я. Поэтому направление показываем стрелкой, а не знаком.
+  const person = debt?.person ?? 'Долг удалён'
+  const account = accountName ?? 'Счёт'
+  const route = outgoing ? `${account} → ${person}` : `${person} → ${account}`
 
   return (
     <SwipeRow onEdit={onOpen} onDelete={onDelete}>
@@ -161,13 +167,9 @@ export function DebtRow({
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[15px] font-medium">{title}</span>
-        <span className="block truncate text-[12.5px] text-faint">
-          {debt?.person ?? 'Долг удалён'}
-          {accountName ? ` · ${accountName}` : ''}
-        </span>
+        <span className="block truncate text-[12.5px] text-faint">{route}</span>
       </span>
       <span className="tnum shrink-0 text-[15px] font-semibold text-dim">
-        {outgoing ? '−' : '+'}
         {money(entry.amount)}
       </span>
     </SwipeRow>
