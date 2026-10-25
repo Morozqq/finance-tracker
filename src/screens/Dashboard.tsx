@@ -55,7 +55,10 @@ export function Dashboard({
     setActiveBar(null)
   }
 
-  const range = useMemo(() => rangeFor(period), [period])
+  const range = useMemo(
+    () => rangeFor(period, data.settings.monthStartDay),
+    [period, data.settings.monthStartDay],
+  )
   const scoped = useMemo(
     () => data.transactions.filter((t) => inRange(t, range)),
     [data.transactions, range],
@@ -225,7 +228,19 @@ export function Dashboard({
           </div>
         </section>
 
-        <Segmented value={period} onChange={setPeriod} options={periodOptions()} />
+        <Segmented
+          value={period}
+          onChange={setPeriod}
+          options={periodOptions(data.settings.monthStartDay)}
+        />
+
+        {/* При сдвинутом начале месяца названия вроде «Октябрь» сами по себе
+            неоднозначны, поэтому показываем настоящие границы периода. */}
+        {data.settings.monthStartDay !== 1 && (period === 'month' || period === 'prev') && (
+          <p className="-mt-3 text-center text-[12px] text-faint">
+            {shortDate(range.from)} — {shortDate(range.to)}
+          </p>
+        )}
 
         {/* Карточки работают переключателем: разбивка ниже показывает выбранное.
             Активную видно по рамке и по тому, что её подпись не приглушена. */}

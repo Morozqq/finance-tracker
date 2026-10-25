@@ -92,6 +92,8 @@ interface AppValue {
   syncTasks: () => Promise<void>
 
   setTheme: (theme: Settings['theme']) => Promise<void>
+  /** День, с которого начинается бюджетный месяц, 1–31. */
+  setMonthStart: (day: number) => Promise<void>
   clearDemo: () => Promise<void>
   signOut: () => Promise<void>
 }
@@ -593,6 +595,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       async setTheme(theme) {
         const settings = { ...data.settings, theme }
+        await commit({ ...data, settings }, (r) => r.saveSettings(settings))
+      },
+      async setMonthStart(monthStartDay) {
+        const settings = { ...data.settings, monthStartDay }
         await commit({ ...data, settings }, (r) => r.saveSettings(settings))
       },
       async clearDemo() {

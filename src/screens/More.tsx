@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   ArrowsClockwise,
   CaretRight,
@@ -11,12 +12,24 @@ import {
 } from '@phosphor-icons/react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../data/store'
-import { Button, Card, Screen, Segmented, SectionTitle } from '../components/ui'
+import { Button, Card, Field, Screen, Segmented, SectionTitle, inputClass } from '../components/ui'
 import { debtRemaining } from '../lib/debts'
 import { plural } from '../lib/format'
 
 export function More() {
-  const { data, mode, email, setTheme, signOut, clearDemo } = useApp()
+  const { data, mode, email, setTheme, setMonthStart, signOut, clearDemo } = useApp()
+
+  // Поле правится посимвольно, поэтому в настройки уходит только то, что уже
+  // похоже на число месяца; на выходе из поля текст возвращается к сохранённому.
+  const [startDayText, setStartDayText] = useState(String(data.settings.monthStartDay))
+  const startDay = data.settings.monthStartDay
+  const typeStartDay = (text: string) => {
+    setStartDayText(text)
+    const next = Number(text)
+    if (Number.isInteger(next) && next >= 1 && next <= 31 && next !== startDay) {
+      void setMonthStart(next)
+    }
+  }
 
   const openDebts = data.debts.filter((d) => debtRemaining(d, data.debtPayments) > 0).length
 
@@ -89,6 +102,34 @@ export function More() {
               { value: 'dark', label: 'Тёмная' },
             ]}
           />
+        </section>
+
+        <section>
+          <SectionTitle>Бюджетный месяц</SectionTitle>
+          <Card>
+            <Field
+              label="Начинается с числа"
+              hint={
+                startDay === 1
+                  ? 'Обычный календарный месяц: с 1-го по последнее число.'
+                  : `Месяц идёт с ${startDay}-го по ${startDay - 1}-е следующего.` +
+                    (startDay > 28
+                      ? ' В коротких месяцах начало сдвигается на последний день.'
+                      : '')
+              }
+            >
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={31}
+                value={startDayText}
+                onChange={(e) => typeStartDay(e.target.value)}
+                onBlur={() => setStartDayText(String(startDay))}
+                className={inputClass}
+              />
+            </Field>
+          </Card>
         </section>
 
         <section>

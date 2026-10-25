@@ -1,11 +1,11 @@
 import {
   eachDayOfInterval,
-  endOfMonth,
   endOfYear,
   format,
+  getDaysInMonth,
   parseISO,
-  startOfMonth,
   startOfYear,
+  subDays,
   subMonths,
 } from 'date-fns'
 import { ru } from 'date-fns/locale'
@@ -31,13 +31,42 @@ export interface Range {
 
 const day = (d: Date) => format(d, 'yyyy-MM-dd')
 
-export function rangeFor(period: Period, now = new Date()): Range {
+/**
+ * Начало месяца, начинающегося с числа startDay, в месяце (year, month).
+ * В коротких месяцах число сдвигается на последний день: 31-е в феврале —
+ * это 28-е или 29-е.
+ */
+function monthStartOn(startDay: number, year: number, month: number): Date {
+  const days = getDaysInMonth(new Date(year, month, 1))
+  return new Date(year, month, Math.min(startDay, days))
+}
+
+/**
+ * Начало бюджетного месяца со сдвигом offset от того, в который попала дата.
+ * При startDay = 1 это обычный календарный месяц.
+ */
+function budgetMonthStart(now: Date, startDay: number, offset: number): Date {
+  const year = now.getFullYear()
+  let month = now.getMonth()
+  // До дня старта мы ещё внутри периода, начавшегося месяцем раньше.
+  if (now < monthStartOn(startDay, year, month)) month -= 1
+  return monthStartOn(startDay, year, month + offset)
+}
+
+export function rangeFor(period: Period, startDay = 1, now = new Date()): Range {
   switch (period) {
     case 'month':
-      return { from: day(startOfMonth(now)), to: day(endOfMonth(now)), label: 'Этот месяц' }
+      return {
+        from: day(budgetMonthStart(now, startDay, 0)),
+        to: day(subDays(budgetMonthStart(now, startDay, 1), 1)),
+        label: 'Этот месяц',
+      }
     case 'prev': {
-      const p = subMonths(now, 1)
-      return { from: day(startOfMonth(p)), to: day(endOfMonth(p)), label: 'Прошлый месяц' }
+      return {
+        from: day(budgetMonthStart(now, startDay, -1)),
+        to: day(subDays(budgetMonthStart(now, startDay, 0), 1)),
+        label: 'Прошлый месяц',
+      }
     }
     case 'year':
       return { from: day(startOfYear(now)), to: day(endOfYear(now)), label: 'Год' }
@@ -50,11 +79,18 @@ export function rangeFor(period: Period, now = new Date()): Range {
  * Названия месяцев вместо «Месяц» и «Прошлый»: рядом с кнопкой «Год» слово
  * «Прошлый» читалось как «прошлый год».
  */
-export function periodOptions(now = new Date()): Array<{ value: Period; label: string }> {
+export function periodOptions(
+  startDay = 1,
+  now = new Date(),
+): Array<{ value: Period; label: string }> {
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+  // Период называем по месяцу, в котором он начался: при старте 21-го числа
+  // «Октябрь» — это 21 октября по 20 ноября, деньги октябрьской зарплаты.
+  const month = (offset: number) =>
+    cap(format(budgetMonthStart(now, startDay, offset), 'LLLL', { locale: ru }))
   return [
-    { value: 'month', label: cap(format(now, 'LLLL', { locale: ru })) },
-    { value: 'prev', label: cap(format(subMonths(now, 1), 'LLLL', { locale: ru })) },
+    { value: 'month', label: month(0) },
+    { value: 'prev', label: month(-1) },
     { value: 'year', label: 'Год' },
     { value: 'all', label: 'Всё' },
   ]

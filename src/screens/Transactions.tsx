@@ -15,7 +15,7 @@ import {
   totals,
   type Period,
 } from '../lib/analytics'
-import { dayLabel, money, plural } from '../lib/format'
+import { dayLabel, money, plural, shortDate } from '../lib/format'
 import type { Transaction, Transfer } from '../lib/types'
 
 export function Transactions({
@@ -33,7 +33,10 @@ export function Transactions({
   const [query, setQuery] = useState('')
 
   const categoryFilter = params.get('category')
-  const range = useMemo(() => rangeFor(period), [period])
+  const range = useMemo(
+    () => rangeFor(period, data.settings.monthStartDay),
+    [period, data.settings.monthStartDay],
+  )
   const categoryIndex = useMemo(
     () => new Map(data.categories.map((c) => [c.id, c])),
     [data.categories],
@@ -106,7 +109,17 @@ export function Transactions({
   return (
     <Screen title="Операции">
       <div className="flex flex-col gap-4">
-        <Segmented value={period} onChange={setPeriod} options={periodOptions()} />
+        <Segmented
+          value={period}
+          onChange={setPeriod}
+          options={periodOptions(data.settings.monthStartDay)}
+        />
+
+        {data.settings.monthStartDay !== 1 && (period === 'month' || period === 'prev') && (
+          <p className="-mt-2 text-center text-[12px] text-faint">
+            {shortDate(range.from)} — {shortDate(range.to)}
+          </p>
+        )}
 
         <div className="relative">
           <MagnifyingGlass
