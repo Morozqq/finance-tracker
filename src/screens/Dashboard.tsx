@@ -19,6 +19,7 @@ import {
   type Period,
 } from '../lib/analytics'
 import { compactMoney, dayLabel, money, monthLabel, num, plural, shortDate } from '../lib/format'
+import type { TxKind } from '../lib/types'
 import { debtTotals } from '../lib/debts'
 import { parseISO, differenceInCalendarDays, getDate } from 'date-fns'
 
@@ -34,6 +35,9 @@ export function Dashboard({
   // Only one drill-down is open at a time: opening one closes the other.
   const [activeSlice, setActiveSlice] = useState<string | null>(null)
   const [activeBar, setActiveBar] = useState<string | null>(null)
+  // Разбивка ниже показывает либо расходы, либо доходы. Расходы по умолчанию:
+  // с ними сверяются чаще.
+  const [kind, setKind] = useState<TxKind>('expense')
 
   const pickSlice = (id: string | null) => {
     setActiveSlice(id)
@@ -43,6 +47,13 @@ export function Dashboard({
     setActiveBar(key)
     if (key) setActiveSlice(null)
   }
+  // Выбранная категория и столбец относятся к прежнему виду, поэтому при
+  // переключении разбор закрывается.
+  const pickKind = (next: TxKind) => {
+    setKind(next)
+    setActiveSlice(null)
+    setActiveBar(null)
+  }
 
   const range = useMemo(() => rangeFor(period), [period])
   const scoped = useMemo(
@@ -51,8 +62,8 @@ export function Dashboard({
   )
   const sums = useMemo(() => totals(scoped), [scoped])
   const slices = useMemo(
-    () => byCategory(scoped, data.categories, 'expense'),
-    [scoped, data.categories],
+    () => byCategory(scoped, data.categories, kind),
+    [scoped, data.categories, kind],
   )
   const debts = useMemo(
     () => debtTotals(data.debts, data.debtPayments),
@@ -64,13 +75,14 @@ export function Dashboard({
   )
 
   const byMonth = period === 'year' || period === 'all'
+  const incomeView = kind === 'income'
 
   const bars = useMemo(() => {
     if (byMonth) {
       return monthlySeries(data.transactions, 12).map((point) => ({
         key: point.key,
         label: point.label,
-        value: point.expense,
+        value: point[kind],
         tick: true,
       }))
     }
@@ -79,10 +91,10 @@ export function Dashboard({
     return series.map((point, i) => ({
       key: point.date,
       label: String(getDate(parseISO(point.date))),
-      value: point.expense,
+      value: point[kind],
       tick: i % step === 0,
     }))
-  }, [byMonth, data.transactions, scoped, range])
+  }, [byMonth, data.transactions, scoped, range, kind])
 
   const categoryIndex = useMemo(
     () => new Map(data.categories.map((c) => [c.id, c])),
@@ -107,9 +119,9 @@ export function Dashboard({
       ? (t: (typeof source)[number]) => t.occurredAt.slice(0, 7) === activeBar
       : (t: (typeof source)[number]) => t.occurredAt === activeBar
     return source
-      .filter((t) => t.kind === 'expense' && match(t))
+      .filter((t) => t.kind === kind && match(t))
       .sort((a, b) => (a.occurredAt < b.occurredAt ? 1 : -1))
-  }, [activeBar, byMonth, data.transactions, scoped])
+  }, [activeBar, byMonth, data.transactions, scoped, kind])
 
   // Сообщаем наверх, открыт ли разбор: пока открыт, плавающая кнопка прячется.
   useEffect(() => {
@@ -215,25 +227,53 @@ export function Dashboard({
 
         <Segmented value={period} onChange={setPeriod} options={periodOptions()} />
 
+        {/* Карточки работают переключателем: разбивка ниже показывает выбранное.
+            Активную видно по рамке и по тому, что её подпись не приглушена. */}
         <div className="grid grid-cols-2 gap-3">
-          <Card>
-            <span className="flex items-center gap-1.5 text-[12.5px] text-dim">
+          <button
+            type="button"
+            onClick={() => pickKind('income')}
+            aria-pressed={incomeView}
+            className={cx(
+              'rounded-[var(--r-lg)] border bg-surface p-4 text-left transition active:scale-[0.99]',
+              incomeView ? 'border-accent' : 'border-line',
+            )}
+          >
+            <span
+              className={cx(
+                'flex items-center gap-1.5 text-[12.5px]',
+                incomeView ? 'text-ink' : 'text-dim',
+              )}
+            >
               <ArrowDown size={14} weight="bold" className="text-pos" />
               Доходы
             </span>
             <span className="tnum mt-1 block text-[19px] font-bold tracking-[-0.02em] text-pos">
               {money(sums.income)}
             </span>
-          </Card>
-          <Card>
-            <span className="flex items-center gap-1.5 text-[12.5px] text-dim">
+          </button>
+          <button
+            type="button"
+            onClick={() => pickKind('expense')}
+            aria-pressed={!incomeView}
+            className={cx(
+              'rounded-[var(--r-lg)] border bg-surface p-4 text-left transition active:scale-[0.99]',
+              incomeView ? 'border-line' : 'border-accent',
+            )}
+          >
+            <span
+              className={cx(
+                'flex items-center gap-1.5 text-[12.5px]',
+                incomeView ? 'text-dim' : 'text-ink',
+              )}
+            >
               <ArrowUp size={14} weight="bold" className="text-neg" />
               Расходы
             </span>
             <span className="tnum mt-1 block text-[19px] font-bold tracking-[-0.02em]">
               {money(sums.expense)}
             </span>
-          </Card>
+          </button>
         </div>
 
         {sums.expense === 0 && sums.income === 0 ? (
@@ -246,6 +286,10 @@ export function Dashboard({
               Добавить операцию
             </Button>
           </Card>
+        ) : sums[kind] === 0 ? (
+          <Card className="py-8 text-center text-[14px] text-dim">
+            {incomeView ? 'За этот период доходов нет' : 'За этот период расходов нет'}
+          </Card>
         ) : (
           <>
             {slices.length > 0 && (
@@ -257,7 +301,7 @@ export function Dashboard({
                     </span>
                   }
                 >
-                  Куда уходят деньги
+                  {incomeView ? 'Откуда приходят деньги' : 'Куда уходят деньги'}
                 </SectionTitle>
                 <Card className="flex flex-col items-center gap-5">
                   <Donut
@@ -266,7 +310,7 @@ export function Dashboard({
                       color: s.category.color,
                       share: s.share,
                     }))}
-                    total={sums.expense}
+                    total={sums[kind]}
                     caption={range.label.toLowerCase()}
                     activeId={activeSlice}
                     onSelect={pickSlice}
@@ -283,7 +327,8 @@ export function Dashboard({
                             {selectedSlice.category.name}
                           </span>
                           <span className="text-[11px] text-faint">
-                            {Math.round(selectedSlice.share * 100)}% расходов
+                            {Math.round(selectedSlice.share * 100)}%{' '}
+                            {incomeView ? 'доходов' : 'расходов'}
                           </span>
                         </>
                       ) : undefined
@@ -354,13 +399,17 @@ export function Dashboard({
 
             {bars.length > 1 && (
               <section>
-                <SectionTitle>{byMonth ? 'Расходы по месяцам' : 'Расходы по дням'}</SectionTitle>
+                <SectionTitle>
+                  {incomeView ? 'Доходы' : 'Расходы'} по {byMonth ? 'месяцам' : 'дням'}
+                </SectionTitle>
                 <Card>
                   <Bars
                     points={bars}
+                    color={incomeView ? 'var(--positive)' : 'var(--accent)'}
                     activeKey={activeBar}
                     onSelect={pickBar}
                     unit={byMonth ? 'месяцам' : 'дням'}
+                    noun={incomeView ? 'Доходы' : 'Расходы'}
                   />
                 </Card>
 
@@ -369,7 +418,7 @@ export function Dashboard({
                     <TxDrill
                       key={activeBar}
                       title={barTitle}
-                      color="var(--accent)"
+                      color={incomeView ? 'var(--positive)' : 'var(--accent)'}
                       items={barItems}
                       categories={categoryIndex}
                       accounts={accountIndex}

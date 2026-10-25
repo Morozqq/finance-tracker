@@ -131,6 +131,7 @@ export function Bars({
   activeKey,
   onSelect,
   unit = 'дням',
+  noun = 'Расходы',
 }: {
   points: BarPoint[]
   color?: string
@@ -138,6 +139,7 @@ export function Bars({
   activeKey?: string | null
   onSelect?: (key: string | null) => void
   unit?: string
+  noun?: string
 }) {
   const max = Math.max(1, ...points.map((p) => p.value))
   const peak = points.reduce((best, p) => (p.value > best.value ? p : best), points[0])
@@ -157,7 +159,7 @@ export function Bars({
         className="flex items-end gap-[3px]"
         style={{ height }}
         role="group"
-        aria-label={`Расходы по ${unit}, максимум ${num(max)} тенге`}
+        aria-label={`${noun} по ${unit}, максимум ${num(max)} тенге`}
       >
         {points.map((point) => {
           const ratio = point.value / max
