@@ -122,7 +122,7 @@ function DrillRow({
   const [busy, setBusy] = useState(false)
 
   return (
-    <li className="flex items-center gap-2.5 rounded-[var(--r-md)] bg-surface px-2.5 py-2">
+    <li className="flex items-center gap-2.5 rounded-[var(--r-md)] border border-line bg-surface px-2.5 py-2">
       <Badge icon={category?.icon ?? 'dots'} color={category?.color ?? '#7C8794'} size={32} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13.5px] font-medium">

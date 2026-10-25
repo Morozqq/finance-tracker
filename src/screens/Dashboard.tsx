@@ -168,7 +168,7 @@ export function Dashboard({
         )}
 
         {postedCount > 0 && (
-          <div className="flex items-center gap-3 rounded-[var(--r-md)] bg-surface px-4 py-3">
+          <div className="flex items-center gap-3 rounded-[var(--r-md)] border border-line bg-surface px-4 py-3">
             <p className="flex-1 text-[13px] leading-snug text-dim">
               Добавлено {postedCount}{' '}
               {plural(postedCount, 'регулярная операция', 'регулярные операции', 'регулярных операций')}{' '}
@@ -195,7 +195,7 @@ export function Dashboard({
             {data.accounts.map((account) => (
               <div
                 key={account.id}
-                className="shrink-0 rounded-[var(--r-md)] bg-surface px-3.5 py-2.5"
+                className="shrink-0 rounded-[var(--r-md)] border border-line bg-surface px-3.5 py-2.5"
               >
                 <span className="flex items-center gap-1.5 text-[12px] text-dim">
                   <span
@@ -386,7 +386,7 @@ export function Dashboard({
         {(debts.owedToMe > 0 || debts.iOwe > 0) && (
           <Link
             to="/more/debts"
-            className="flex items-center gap-3 rounded-[var(--r-lg)] bg-surface px-4 py-3"
+            className="flex items-center gap-3 rounded-[var(--r-lg)] border border-line bg-surface px-4 py-3"
           >
             <span className="grid size-9 shrink-0 place-items-center rounded-[var(--r-sm)] bg-surface-2 text-dim">
               <Handshake size={19} />

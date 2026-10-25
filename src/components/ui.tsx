@@ -28,7 +28,9 @@ export function Screen({
           {action}
         </div>
       </header>
-      <main className="px-5 pb-[calc(96px+env(safe-area-inset-bottom))]">{children}</main>
+      <main className="px-5 pb-[calc(var(--pad-bottom,148px)+env(safe-area-inset-bottom))]">
+        {children}
+      </main>
     </div>
   )
 }
@@ -63,7 +65,9 @@ export function SubScreen({
           {action}
         </div>
       </header>
-      <main className="px-5 pb-[calc(96px+env(safe-area-inset-bottom))]">{children}</main>
+      <main className="px-5 pb-[calc(var(--pad-bottom,148px)+env(safe-area-inset-bottom))]">
+        {children}
+      </main>
     </div>
   )
 }
@@ -150,7 +154,7 @@ export function Card({
   as?: 'div' | 'section'
 }) {
   return (
-    <Tag className={cx('rounded-[var(--r-lg)] bg-surface p-4', className)}>{children}</Tag>
+    <Tag className={cx('rounded-[var(--r-lg)] border border-line bg-surface p-4', className)}>{children}</Tag>
   )
 }
 
@@ -176,7 +180,7 @@ export function Empty({
 }) {
   const Glyph = iconOf(icon)
   return (
-    <div className="flex flex-col items-center gap-3 rounded-[var(--r-lg)] bg-surface px-6 py-12 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-[var(--r-lg)] border border-line bg-surface px-6 py-12 text-center">
       <span className="grid size-14 place-items-center rounded-full bg-surface-2 text-faint">
         <Glyph size={26} weight="duotone" />
       </span>

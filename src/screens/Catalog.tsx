@@ -538,11 +538,11 @@ function DepositOutlook({
       </Field>
 
       <div className="grid grid-cols-2 gap-2">
-        <div className="rounded-[var(--r-md)] bg-surface px-3 py-2.5">
+        <div className="rounded-[var(--r-md)] border border-line bg-surface px-3 py-2.5">
           <p className="text-[12px] text-dim">Через 6 месяцев</p>
           <p className="tnum mt-0.5 text-[16px] font-semibold">≈ {money(half.balance)}</p>
         </div>
-        <div className="rounded-[var(--r-md)] bg-surface px-3 py-2.5">
+        <div className="rounded-[var(--r-md)] border border-line bg-surface px-3 py-2.5">
           <p className="text-[12px] text-dim">Через год</p>
           <p className="tnum mt-0.5 text-[16px] font-semibold">≈ {money(year.balance)}</p>
         </div>

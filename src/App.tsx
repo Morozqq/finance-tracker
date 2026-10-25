@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useApp } from './data/store'
@@ -29,6 +29,11 @@ export function App() {
   // On the tasks tab the round button adds a task; everywhere else, an operation.
   const onTasks = location.pathname.startsWith('/tasks')
 
+  // Экраны со своей кнопкой добавления в шапке — «Цели» и разделы «Ещё» —
+  // плавающую не показывают: две одинаковые кнопки с разным смыслом рядом
+  // только путают. Заодно страница там не резервирует место под неё.
+  const hasFab = !(location.pathname === '/goals' || location.pathname.startsWith('/more'))
+
   const openNew = () => {
     setEditing(null)
     setSheetOpen(true)
@@ -39,7 +44,10 @@ export function App() {
   }
 
   return (
-    <div className="mx-auto max-w-[520px]">
+    <div
+      className="mx-auto max-w-[520px]"
+      style={{ '--pad-bottom': hasFab ? '148px' : '96px' } as CSSProperties}
+    >
       {error && (
         <div className="fixed inset-x-0 top-0 z-50 bg-neg px-4 py-2 text-center text-[13px] font-medium text-white">
           {error}
@@ -78,7 +86,7 @@ export function App() {
       <TabBar
         onAdd={onTasks ? () => setTaskSheetOpen(true) : openNew}
         addLabel={onTasks ? 'Добавить задачу' : undefined}
-        hideAdd={drillOpen}
+        hideAdd={drillOpen || !hasFab}
       />
 
       <AmountSheet

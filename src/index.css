@@ -14,7 +14,7 @@
 
   --text: #16181c;
   --text-dim: #5e646e;
-  --text-faint: #8b919b;
+  --text-faint: #686f7b;
 
   --accent: #d4551f;
   --accent-soft: #fbe8dd;
@@ -25,9 +25,10 @@
   --negative: #c8343f;
   --negative-soft: #fbe4e5;
 
-  /* Activity grid, GitHub's green scale. */
-  --heat-0: #e8e8e4;
-  --heat-1: #9be9a8;
+  /* Activity grid. Even luminance steps, so level 1 reads as "something
+     happened" against the empty cell rather than as another empty cell. */
+  --heat-0: #e4e4e0;
+  --heat-1: #8adf9a;
   --heat-2: #40c463;
   --heat-3: #30a14e;
   --heat-4: #216e39;
@@ -55,7 +56,7 @@
 
     --text: #f0f2f5;
     --text-dim: #98a0ae;
-    --text-faint: #626a78;
+    --text-faint: #7b8494;
 
     --accent: #ff8a4c;
     --accent-soft: #35210f;
@@ -66,9 +67,9 @@
     --negative: #f2565f;
     --negative-soft: #2d1417;
 
-    --heat-0: #1f232b;
-    --heat-1: #0e4429;
-    --heat-2: #006d32;
+    --heat-0: #262a33;
+    --heat-1: #12663c;
+    --heat-2: #1a8046;
     --heat-3: #26a641;
     --heat-4: #39d353;
 
@@ -90,7 +91,7 @@
 
   --text: #f0f2f5;
   --text-dim: #98a0ae;
-  --text-faint: #626a78;
+  --text-faint: #7b8494;
 
   --accent: #ff8a4c;
   --accent-soft: #35210f;
@@ -101,9 +102,9 @@
   --negative: #f2565f;
   --negative-soft: #2d1417;
 
-  --heat-0: #1f232b;
-  --heat-1: #0e4429;
-  --heat-2: #006d32;
+  --heat-0: #262a33;
+  --heat-1: #12663c;
+  --heat-2: #1a8046;
   --heat-3: #26a641;
   --heat-4: #39d353;
 

@@ -22,7 +22,7 @@ function SwipeRow({
   const [revealed, setRevealed] = useState(false)
 
   return (
-    <div className="relative overflow-hidden rounded-[var(--r-md)]">
+    <div className="relative overflow-hidden rounded-[var(--r-md)] border border-line">
       <div className="absolute inset-y-0 right-0 flex items-center">
         <button
           type="button"

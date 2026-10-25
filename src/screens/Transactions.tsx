@@ -140,7 +140,7 @@ export function Transactions({
         )}
 
         {count > 0 && (
-          <div className="flex items-baseline justify-between rounded-[var(--r-md)] bg-surface px-4 py-3">
+          <div className="flex items-baseline justify-between rounded-[var(--r-md)] border border-line bg-surface px-4 py-3">
             <span className="text-[13px] text-dim">
               {count} {plural(count, 'операция', 'операции', 'операций')}
             </span>
